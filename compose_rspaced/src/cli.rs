@@ -161,8 +161,15 @@ fn run_release(a: ReleaseArgs) -> Result<()> {
 
     println!("release:    {}", packed.provenance.release_image);
     println!("manifest:   {}", packed.provenance.release_manifest_digest);
-    println!("components: {} discovered", packed.references.components.len());
-    println!("            {} packed, {} failed", packed.components.len(), packed.failures.len());
+    println!(
+        "components: {} discovered",
+        packed.references.components.len()
+    );
+    println!(
+        "            {} packed, {} failed",
+        packed.components.len(),
+        packed.failures.len()
+    );
     println!("store:      {}", a.store.display());
     if !packed.failures.is_empty() {
         println!("failures:");

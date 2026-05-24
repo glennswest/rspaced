@@ -87,8 +87,8 @@ pub fn find_image_references(layer_dirs: &[std::path::PathBuf]) -> Result<Option
     for dir in layer_dirs {
         let canonical = dir.join("release-manifests/image-references");
         if canonical.is_file() {
-            let bytes = fs::read(&canonical)
-                .with_context(|| format!("reading {}", canonical.display()))?;
+            let bytes =
+                fs::read(&canonical).with_context(|| format!("reading {}", canonical.display()))?;
             return Ok(Some(ImageReferences::parse(&bytes)?));
         }
     }

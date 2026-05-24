@@ -35,7 +35,10 @@ impl Reference {
         } else {
             let slash = s.rfind('/').map(|i| i + 1).unwrap_or(0);
             match s[slash..].rfind(':') {
-                Some(colon) => (s[..slash + colon].to_string(), s[slash + colon + 1..].to_string()),
+                Some(colon) => (
+                    s[..slash + colon].to_string(),
+                    s[slash + colon + 1..].to_string(),
+                ),
                 None => (s.to_string(), "latest".to_string()),
             }
         };
@@ -122,7 +125,8 @@ impl Client {
 
     /// Fetch the raw manifest bytes for a reference (no parsing).
     pub fn fetch_manifest(&self, r: &Reference) -> Result<RawManifest> {
-        let resp = self.authorized_get(&r.manifest_url(), &r.pull_scope(), Some(MEDIA_TYPES_ACCEPT))?;
+        let resp =
+            self.authorized_get(&r.manifest_url(), &r.pull_scope(), Some(MEDIA_TYPES_ACCEPT))?;
         let status = resp.status();
         let content_type = header(&resp, "content-type");
         if !status.is_success() {
@@ -142,8 +146,8 @@ impl Client {
         let raw = self.fetch_manifest(r)?;
         // An index has a `manifests` array; a manifest has `layers`. Probe the
         // JSON rather than trusting Content-Type, which mirrors are loose about.
-        let v: serde_json::Value = serde_json::from_slice(&raw.body)
-            .context("parsing manifest JSON")?;
+        let v: serde_json::Value =
+            serde_json::from_slice(&raw.body).context("parsing manifest JSON")?;
         if v.get("manifests").is_some() {
             Ok(ManifestOrIndex::Index(serde_json::from_slice(&raw.body)?))
         } else {
@@ -185,7 +189,11 @@ impl Client {
     pub fn pull_blob(&self, r: &Reference, digest: &Digest, out: &mut impl Write) -> Result<()> {
         let mut resp = self.authorized_get(&r.blob_url(digest), &r.pull_scope(), None)?;
         if !resp.status().is_success() {
-            bail!("blob fetch {} returned {}", r.blob_url(digest), resp.status());
+            bail!(
+                "blob fetch {} returned {}",
+                r.blob_url(digest),
+                resp.status()
+            );
         }
         let mut verifier = Verifier::new(digest.clone())?;
         let mut buf = [0u8; 64 * 1024];
@@ -247,7 +255,10 @@ impl Client {
         let realm = params
             .get("realm")
             .ok_or_else(|| anyhow!("auth challenge missing realm"))?;
-        let scope = params.get("scope").map(String::as_str).unwrap_or(fallback_scope);
+        let scope = params
+            .get("scope")
+            .map(String::as_str)
+            .unwrap_or(fallback_scope);
 
         let mut req = self.http.get(realm);
         if let Some(service) = params.get("service") {
@@ -258,7 +269,9 @@ impl Client {
             req = req.basic_auth(u, Some(p));
         }
 
-        let resp = req.send().with_context(|| format!("GET token from {realm}"))?;
+        let resp = req
+            .send()
+            .with_context(|| format!("GET token from {realm}"))?;
         if !resp.status().is_success() {
             bail!("token endpoint {realm} returned {}", resp.status());
         }
@@ -281,7 +294,9 @@ fn header(resp: &Response, name: &str) -> String {
 
 /// Parse the parameters of a `Bearer key="value",key2="value2"` challenge.
 fn parse_bearer_challenge(header: &str) -> Option<HashMap<String, String>> {
-    let rest = header.strip_prefix("Bearer ").or_else(|| header.strip_prefix("bearer "))?;
+    let rest = header
+        .strip_prefix("Bearer ")
+        .or_else(|| header.strip_prefix("bearer "))?;
     let mut out = HashMap::new();
     for part in rest.split(',') {
         if let Some((k, v)) = part.split_once('=') {
@@ -298,11 +313,15 @@ mod tests {
 
     #[test]
     fn parse_tag_ref() {
-        let r = Reference::parse("quay.io/openshift-release-dev/ocp-release:4.18.30-x86_64").unwrap();
+        let r =
+            Reference::parse("quay.io/openshift-release-dev/ocp-release:4.18.30-x86_64").unwrap();
         assert_eq!(r.registry, "quay.io");
         assert_eq!(r.repository, "openshift-release-dev/ocp-release");
         assert_eq!(r.reference, "4.18.30-x86_64");
-        assert_eq!(r.pull_scope(), "repository:openshift-release-dev/ocp-release:pull");
+        assert_eq!(
+            r.pull_scope(),
+            "repository:openshift-release-dev/ocp-release:pull"
+        );
     }
 
     #[test]
@@ -327,6 +346,9 @@ mod tests {
         let p = parse_bearer_challenge(h).unwrap();
         assert_eq!(p["realm"], "https://quay.io/v2/auth");
         assert_eq!(p["service"], "quay.io");
-        assert_eq!(p["scope"], "repository:openshift-release-dev/ocp-release:pull");
+        assert_eq!(
+            p["scope"],
+            "repository:openshift-release-dev/ocp-release:pull"
+        );
     }
 }

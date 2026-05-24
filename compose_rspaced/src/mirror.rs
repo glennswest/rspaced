@@ -80,8 +80,8 @@ pub fn download(url: &str, dest: &Path) -> Result<()> {
 
     let tmp = dest.with_extension("part");
     {
-        let mut out = fs::File::create(&tmp)
-            .with_context(|| format!("create {}", tmp.display()))?;
+        let mut out =
+            fs::File::create(&tmp).with_context(|| format!("create {}", tmp.display()))?;
         std::io::copy(&mut resp, &mut out)?;
         out.flush()?;
     }

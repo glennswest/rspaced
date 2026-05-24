@@ -155,8 +155,8 @@ pub fn pack_image(
         };
 
         // 4. Verity Merkle root over the extracted tree (re-checked at boot).
-        let (verity_root, verity_manifest) = build_verity(&dir)
-            .with_context(|| format!("building verity for layer {hex}"))?;
+        let (verity_root, verity_manifest) =
+            build_verity(&dir).with_context(|| format!("building verity for layer {hex}"))?;
         fs::write(
             verity_dir.join(format!("{hex}.verity.json")),
             serde_json::to_vec_pretty(&verity_manifest)?,

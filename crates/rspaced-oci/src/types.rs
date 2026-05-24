@@ -67,7 +67,11 @@ pub struct Platform {
     /// OS (e.g. `linux`).
     pub os: String,
     /// Optional OS version.
-    #[serde(rename = "os.version", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "os.version",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub os_version: Option<String>,
     /// Optional architecture variant (e.g. `v8`).
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1,0 +1,82 @@
+name: ci
+
+# CI runs on forcicd.g8.lo (Forgejo + act_runner), not GitHub Actions — same
+# convention as the sibling Rust repos. Every job is gated with
+# `if: github.server_url != 'https://github.com'` so the GitHub side records
+# the workflow_run but skips all jobs (zero GH minutes); the Forgejo mirror
+# runs everything on the LAN runner.
+#
+# rspaced has a path dependency on ../rspacefs (rspacefs-verity), so each job
+# checks out rspacefs as a sibling before any cargo command.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+  RSPACEFS_REF: main
+
+jobs:
+  fmt:
+    name: fmt
+    if: github.server_url != 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: checkout rspacefs sibling (path dep)
+        run: git clone --depth 1 --branch "${RSPACEFS_REF}" https://github.com/glennswest/rspacefs.git ../rspacefs
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    if: github.server_url != 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: checkout rspacefs sibling (path dep)
+        run: git clone --depth 1 --branch "${RSPACEFS_REF}" https://github.com/glennswest/rspacefs.git ../rspacefs
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2.7.3
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    name: test
+    if: github.server_url != 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: checkout rspacefs sibling (path dep)
+        run: git clone --depth 1 --branch "${RSPACEFS_REF}" https://github.com/glennswest/rspacefs.git ../rspacefs
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2.7.3
+      - run: cargo test --workspace --all-targets
+
+  build:
+    name: build linux release (x86_64)
+    if: github.server_url != 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: checkout rspacefs sibling (path dep)
+        run: git clone --depth 1 --branch "${RSPACEFS_REF}" https://github.com/glennswest/rspacefs.git ../rspacefs
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2.7.3
+      - name: build compose_rspaced
+        run: |
+          cargo build --release --target x86_64-unknown-linux-gnu -p compose_rspaced
+          ls -la target/x86_64-unknown-linux-gnu/release/compose_rspaced

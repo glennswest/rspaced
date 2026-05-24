@@ -21,5 +21,5 @@ mod types;
 pub use client::{Client, Reference};
 pub use digest::Digest;
 pub use types::{
-    Descriptor, ImageConfig, Index, Manifest, Platform, media_type, MEDIA_TYPES_ACCEPT,
+    media_type, Descriptor, ImageConfig, Index, Manifest, Platform, MEDIA_TYPES_ACCEPT,
 };

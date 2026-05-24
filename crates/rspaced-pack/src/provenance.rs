@@ -58,10 +58,10 @@ impl ImageProvenance {
     pub fn write(&self, store_root: &Path) -> Result<()> {
         let dir = store_root.join("provenance/images");
         fs::create_dir_all(&dir)?;
-        let hex = self.manifest_digest.split_once(':').map_or(
-            self.manifest_digest.as_str(),
-            |(_, h)| h,
-        );
+        let hex = self
+            .manifest_digest
+            .split_once(':')
+            .map_or(self.manifest_digest.as_str(), |(_, h)| h);
         let path = dir.join(format!("{hex}.json"));
         let json = serde_json::to_vec_pretty(self)?;
         fs::write(&path, json).with_context(|| format!("writing {}", path.display()))?;
