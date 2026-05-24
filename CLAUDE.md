@@ -26,7 +26,9 @@ Version locations (keep in sync on every bump):
 - [x] Scaffold `compose_rspaced/` Rust CLI — `latest` + per-output subcommands, mirror discovery, atomic download, sha256 verify, online/offline staging (`files` output functional)
 - [x] Document artifact map (`ARTIFACTS.md`) and agent boot/pivot model (`DESIGN.md`)
 - [x] Convert to cargo workspace; add `crates/rspaced-oci` (OCI pull client + image types ported from fastregistry, anonymous quay.io bearer auth, validated live)
-- [ ] Add `crates/rspaced-pack` — pull an image and extract layers into rspacefs layer dirs (consumes `rspaced-oci` + `rspacefs-core`)
+- [x] Add `crates/rspaced-pack` — pull image → extract layers into rspacefs layer dirs (`LayerFS` order, whiteouts preserved) + release `image-references` discovery (validated live: 188 components)
+- [ ] Pull the full release payload (loop component images from `image-references`) + RHCOS/`machine-os-images`; dedup, parallelize
+- [ ] Stack packed layer dirs into a local rspacefs via `rspacefs-core` `LayerFS`
 - [ ] Wire `compose_rspaced` registry push/pull to `rspaced-oci` — unblocks offline mode
 - [ ] Implement `iso` output: gather signed assets → embed local rspacefs → bootc wrapper via bootc-image-builder (boots an already-installed live system; same RHCOS kernel; PVC config, no ISO write-magic)
 - [ ] Implement `pxe` output (kernel + initramfs + rootfs reference tree)
