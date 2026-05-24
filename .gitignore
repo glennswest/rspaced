@@ -1,0 +1,39 @@
+# Secrets and environment
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# IDE and OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+target/
+dist/
+build/
+node_modules/
+__pycache__/
+*.pyc
+bin/
+out/
+
+# Container / boot artifacts
+*.iso
+*.img
+*.qcow2
+*.raw
+*.vmdk
+
+# Logs and temp
+*.log
+tmp/
+temp/
