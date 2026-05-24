@@ -37,13 +37,18 @@ compose_rspaced files --version 4.18.30 --out ./files/
 
 ### Source modes
 
-- `--mode online` (default) — fetch from `mirror.openshift.com`, verify
-  against `sha256sum.txt`, cache locally.
-- `--mode offline` — source only from `--registry` (no mirror access).
-  Requires an explicit `--version`.
+A central registry is **optional** — you can build an ISO/PXE with no registry
+at all (rspacefs just local). Only the `registry` subcommand requires it.
 
-Typical flow: run `registry` once online to populate qregistry, then build
-`iso`/`pxe` `--mode offline` from the registry — no redownloads, fully offline.
+- `--mode online` (default) — fetch from `mirror.openshift.com`, verify
+  against `sha256sum.txt`, cache locally. Builds run from the local cache.
+- `--mode offline` — build from the local cache / local rspacefs; no mirror
+  access. Requires an explicit `--version`. If `--registry` is set, missing
+  artifacts are pulled from it; otherwise everything must already be local.
+
+Valid flows: (1) online once → `registry` push → later offline builds from it;
+(2) online straight to an ISO with no registry; (3) fully offline from a local
+cache / local rspacefs with no registry.
 
 ## Status
 

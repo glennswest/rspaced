@@ -41,17 +41,25 @@ rspacefs registries can hold and serve them independently. Image refs are
 - `org.rspaced.rhcos.version`
 - `org.rspaced.rhcos.arch`
 
-## Online vs offline
+## Online vs offline (the registry is optional)
+
+A central registry is **never required** to build an ISO/PXE — rspacefs can be
+purely local. The only command that needs `--registry` is the `registry`
+subcommand, whose job is to push there.
 
 - **online** (default) — fetch artifacts and `sha256sum.txt` from the mirror,
-  verify, cache locally. Run `compose_rspaced registry` once in this mode to
-  populate qregistry.
-- **offline** — source artifacts only from qregistry; never touch the mirror.
-  Requires `--registry` and an explicit `--version` (cannot resolve "latest"
-  without the mirror). Used for repeatable ISO/PXE builds on isolated hosts.
+  verify, cache locally. Builds proceed straight from the local cache; no
+  registry involved unless you explicitly push.
+- **offline** — build from the local cache / local rspacefs; never touch the
+  mirror. The central registry is optional: if `--registry` is set, missing
+  artifacts are pulled from it; otherwise everything must already be local.
+  Requires an explicit `--version` (cannot resolve "latest" without the
+  mirror).
 
-Normal workflow: populate qregistry online once, then build ISO/PXE `--mode
-offline` from the registry — no redownloads, full offline capability.
+Workflows, all valid:
+1. Online once → `registry` push → later `--mode offline --registry …` builds.
+2. Online straight to an ISO, no registry at all.
+3. Fully offline from a local cache / local rspacefs, no registry at all.
 
 ## Verification
 
