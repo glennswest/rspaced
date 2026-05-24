@@ -27,7 +27,7 @@ Version locations (keep in sync on every bump):
 ## Work Plan
 
 - [x] Scaffold repo (`CLAUDE.md`, `README.md`, `CHANGELOG.md`, `.gitignore`, subproject dirs)
-- [ ] Configure GitHub remote and push initial commit
+- [x] Configure GitHub remote and push initial commit (`git@github.com:glennswest/rspaced.git`, public)
 - [ ] Flesh out `rspaced_agent/` — bootc `Containerfile`, `rspacefs` writer, kernel packaging
 - [ ] Flesh out `compose_rspaced/` — input-repo ingestion, ISO build path, signed-bootc build path
 - [ ] CI for both build targets
