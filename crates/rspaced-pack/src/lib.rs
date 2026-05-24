@@ -17,7 +17,12 @@
 //! the layer directories it stacks.
 
 pub mod layer;
+pub mod payload;
+pub mod provenance;
 pub mod release;
+pub mod store;
 
 pub use layer::{extract_layer, pack_image, LayerStats, PackedImage};
+pub use payload::{pack_release, PackOptions, PackedComponent, PackedRelease};
+pub use provenance::{ImageProvenance, LayerProvenance, ReleaseProvenance};
 pub use release::{find_image_references, ComponentRef, ImageReferences};

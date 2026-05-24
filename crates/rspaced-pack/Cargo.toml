@@ -13,6 +13,10 @@ rspaced-oci = { path = "../rspaced-oci" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
 flate2.workspace = true
 tar.workspace = true
+vfs.workspace = true
+rspacefs-verity.workspace = true
 tracing.workspace = true

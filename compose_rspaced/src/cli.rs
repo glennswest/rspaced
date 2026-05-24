@@ -17,6 +17,9 @@ pub struct Cli {
 pub enum Command {
     /// Print the latest RHCOS z-stream version in a major.minor series.
     Latest(LatestArgs),
+    /// Pull and pack an entire OpenShift release payload (release image + every
+    /// component image from the Red Hat registry) into a provenance-tracked store.
+    Release(ReleaseArgs),
     /// Push the artifact set to a qregistry (the offline cache / source of truth).
     Registry(SourceArgs),
     /// Build a bootc-based live ISO.
@@ -39,6 +42,26 @@ pub struct LatestArgs {
     /// Target architecture (kernel-arch name, e.g. x86_64 / aarch64).
     #[arg(long, default_value = "x86_64")]
     pub arch: String,
+}
+
+#[derive(Args)]
+pub struct ReleaseArgs {
+    /// RHCOS/OCP z-stream version, e.g. "4.18.30".
+    #[arg(long)]
+    pub version: String,
+    /// Target architecture (kernel-arch name; tag uses this, platform is its
+    /// mirror alias, e.g. x86_64 -> amd64).
+    #[arg(long, default_value = "x86_64")]
+    pub arch: String,
+    /// Provenance-tracked store directory (blobs, extracted layers, provenance).
+    #[arg(long, default_value = "./store")]
+    pub store: PathBuf,
+    /// Release image repository (without tag).
+    #[arg(long, default_value = "quay.io/openshift-release-dev/ocp-release")]
+    pub image_base: String,
+    /// Cap the number of component images pulled (for testing). Omit to pull all.
+    #[arg(long)]
+    pub limit: Option<usize>,
 }
 
 #[derive(Args, Clone)]
@@ -90,6 +113,7 @@ pub fn run(cli: Cli) -> Result<()> {
             println!("{}", crate::mirror::find_latest(&a.series, &a.arch)?);
             Ok(())
         }
+        Command::Release(a) => run_release(a),
         Command::Registry(src) => {
             let staged = crate::stage::stage(&src)?;
             crate::output::registry(&src, &staged)
@@ -115,4 +139,36 @@ pub fn run(cli: Cli) -> Result<()> {
             crate::output::files(&o.source, &staged, &o.out)
         }
     }
+}
+
+fn run_release(a: ReleaseArgs) -> Result<()> {
+    let image = format!("{}:{}-{}", a.image_base, a.version, a.arch);
+    let reference = rspaced_oci::Reference::parse(&image)?;
+    let platform = crate::mirror::mirror_arch(&a.arch).to_string();
+    let client = rspaced_oci::Client::new()?;
+
+    tracing::info!(%image, platform = %platform, store = %a.store.display(), "packing release payload");
+    let packed = rspaced_pack::pack_release(
+        &client,
+        &reference,
+        &a.store,
+        &rspaced_pack::PackOptions {
+            arch: platform,
+            os: "linux".to_string(),
+            limit: a.limit,
+        },
+    )?;
+
+    println!("release:    {}", packed.provenance.release_image);
+    println!("manifest:   {}", packed.provenance.release_manifest_digest);
+    println!("components: {} discovered", packed.references.components.len());
+    println!("            {} packed, {} failed", packed.components.len(), packed.failures.len());
+    println!("store:      {}", a.store.display());
+    if !packed.failures.is_empty() {
+        println!("failures:");
+        for (name, err) in &packed.failures {
+            println!("  {name}: {err}");
+        }
+    }
+    Ok(())
 }

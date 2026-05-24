@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 rspaced-oci = { path = "../crates/rspaced-oci" }
+rspaced-pack = { path = "../crates/rspaced-pack" }
 
 clap.workspace = true
 anyhow.workspace = true
