@@ -25,8 +25,10 @@ Version locations (keep in sync on every bump):
 - [x] Configure GitHub remote and push initial commit (`git@github.com:glennswest/rspaced.git`, public)
 - [x] Scaffold `compose_rspaced/` Rust CLI — `latest` + per-output subcommands, mirror discovery, atomic download, sha256 verify, online/offline staging (`files` output functional)
 - [x] Document artifact map (`ARTIFACTS.md`) and agent boot/pivot model (`DESIGN.md`)
-- [ ] Implement `compose_rspaced` qregistry push/pull (registry.rs stubs → real OCI client) — unblocks offline mode
-- [ ] Implement `iso` output (bootc live ISO reusing the chosen RHCOS kernel)
+- [x] Convert to cargo workspace; add `crates/rspaced-oci` (OCI pull client + image types ported from fastregistry, anonymous quay.io bearer auth, validated live)
+- [ ] Add `crates/rspaced-pack` — pull an image and extract layers into rspacefs layer dirs (consumes `rspaced-oci` + `rspacefs-core`)
+- [ ] Wire `compose_rspaced` registry push/pull to `rspaced-oci` — unblocks offline mode
+- [ ] Implement `iso` output: gather signed assets → embed local rspacefs → bootc wrapper via bootc-image-builder (boots an already-installed live system; same RHCOS kernel; PVC config, no ISO write-magic)
 - [ ] Implement `pxe` output (kernel + initramfs + rootfs reference tree)
 - [ ] Implement `raw`/`qcow2` decompression passthrough
 - [ ] Flesh out `rspaced_agent/` — bootc image, live-pivot logic, rspacefs registry wiring, PVC config/push-back
