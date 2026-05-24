@@ -1,10 +1,10 @@
 [package]
 name = "compose_rspaced"
 version = "0.1.0"
-edition = "2021"
-authors = ["Glenn West"]
-license = "MIT"
-repository = "https://github.com/glennswest/rspaced"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "Compose rspaced boot artifacts (ISO / PXE / qregistry) from RHCOS install media."
 
 [[bin]]
@@ -12,18 +12,13 @@ name = "compose_rspaced"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
-anyhow = "1"
-reqwest = { version = "0.12", features = ["blocking", "rustls-tls"], default-features = false }
-sha2 = "0.10"
-hex = "0.4"
-regex = "1"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rspaced-oci = { path = "../crates/rspaced-oci" }
 
-[profile.release]
-opt-level = 3
-lto = "thin"
-codegen-units = 1
-strip = "symbols"
-panic = "abort"
+clap.workspace = true
+anyhow.workspace = true
+reqwest.workspace = true
+sha2.workspace = true
+hex.workspace = true
+regex.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
