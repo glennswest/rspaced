@@ -3,13 +3,13 @@
 
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use flate2::read::GzDecoder;
 use rspaced_oci::{Client, Digest, ImageConfig, Index, Manifest, Reference};
 use sha2::{Digest as _, Sha256};
-use vfs::{PhysicalFS, VfsPath};
 
 use crate::provenance::{ImageProvenance, LayerProvenance};
 use crate::store::BlobStore;
@@ -146,10 +146,8 @@ pub fn pack_image(
         let stats = if marker.exists() {
             count_tree(&dir)?
         } else {
-            if dir.exists() {
-                fs::remove_dir_all(&dir)
-                    .with_context(|| format!("clearing stale layer dir {}", dir.display()))?;
-            }
+            force_remove_dir_all(&dir)
+                .with_context(|| format!("clearing stale layer dir {}", dir.display()))?;
             let s = extract_layer(&blob_path, &dir)
                 .with_context(|| format!("extracting layer {}", layer.digest.short_hex()))?;
             File::create(&marker)?;
@@ -259,11 +257,35 @@ fn compute_diff_id(src: &Path) -> Result<Digest> {
 
 /// Build a `rspacefs-verity` Merkle manifest over `dir`; return its hex root
 /// hash and the manifest (the same tree the runtime verifies at boot).
+///
+/// Uses `build_from_dir` (symlink-aware: records links via `symlink_metadata`,
+/// tolerates dangling, doesn't follow/double-hash) — required for real OCI
+/// layer trees (rspacefs#18).
 fn build_verity(dir: &Path) -> Result<(String, rspacefs_verity::LayerManifest)> {
-    let root = VfsPath::new(PhysicalFS::new(dir));
-    let (_tree, manifest) = rspacefs_verity::MerkleTree::build_from_vfs(&root)
+    let (_tree, manifest) = rspacefs_verity::MerkleTree::build_from_dir(dir)
         .map_err(|e| anyhow!("verity build over {}: {e}", dir.display()))?;
     Ok((hex::encode(manifest.root_hash), manifest))
+}
+
+/// Remove a directory tree, even one extracted from an image with read-only
+/// directories (mode 0555). `fs::remove_dir_all` can't unlink entries inside a
+/// directory that lacks owner-write, so make every directory writable first.
+fn force_remove_dir_all(dir: &Path) -> Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let _ = fs::set_permissions(&d, fs::Permissions::from_mode(0o755));
+        if let Ok(rd) = fs::read_dir(&d) {
+            for e in rd.flatten() {
+                if e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    stack.push(e.path());
+                }
+            }
+        }
+    }
+    fs::remove_dir_all(dir).with_context(|| format!("removing {}", dir.display()))
 }
 
 /// Walk the extracted tree counting files/symlinks and whiteout markers.

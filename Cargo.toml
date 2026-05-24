@@ -18,7 +18,6 @@ hex = "0.4"
 regex = "1"
 flate2 = "1"
 tar = "0.4"
-vfs = "0.12"
 # Consumed from the sibling rspacefs repo (do not author here). Interim path
 # dep until rspacefs publishes / we pin a git rev for CI.
 rspacefs-verity = { path = "../rspacefs/crates/rspacefs-verity" }

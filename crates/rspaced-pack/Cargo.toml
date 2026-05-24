@@ -17,6 +17,5 @@ sha2.workspace = true
 hex.workspace = true
 flate2.workspace = true
 tar.workspace = true
-vfs.workspace = true
 rspacefs-verity.workspace = true
 tracing.workspace = true
