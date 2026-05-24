@@ -52,11 +52,12 @@ pub struct SourceArgs {
     /// Target architecture (kernel-arch name, e.g. x86_64 / aarch64).
     #[arg(long, default_value = "x86_64")]
     pub arch: String,
-    /// online: pull from mirror.openshift.com.
-    /// offline: pull only from --registry (requires --registry).
+    /// online: pull from mirror.openshift.com (registry optional).
+    /// offline: build from the local cache / local rspacefs (registry optional).
     #[arg(long, value_enum, default_value_t = Mode::Online)]
     pub mode: Mode,
-    /// qregistry base URL (e.g. http://qregistry.gt.lo:5000).
+    /// Optional qregistry base URL (e.g. http://qregistry.gt.lo:5000). Never
+    /// required to build an ISO/PXE; only the `registry` subcommand needs it.
     #[arg(long)]
     pub registry: Option<String>,
     /// Local raw-download cache directory.
@@ -75,9 +76,11 @@ pub struct OutArgs {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
-    /// Pull artifacts from the upstream OpenShift mirror.
+    /// Pull artifacts from the upstream OpenShift mirror. No registry required.
     Online,
-    /// Pull artifacts only from the configured qregistry.
+    /// Build from the local cache / local rspacefs; never touch the mirror.
+    /// A central registry is optional — if --registry is set, missing
+    /// artifacts are pulled from it; otherwise everything must be local.
     Offline,
 }
 

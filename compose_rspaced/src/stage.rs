@@ -1,7 +1,7 @@
 //! Stage the RHCOS artifact set into the local cache, honoring online vs
 //! offline mode, and verify each file against the published checksums.
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -115,13 +115,13 @@ fn fetch_one(src: &SourceArgs, version: &str, name: &str, local: &Path) -> Resul
             let url = crate::mirror::artifact_url(version, &src.arch, name);
             crate::mirror::download(&url, local)
         }
-        Mode::Offline => {
-            let reg = src
-                .registry
-                .as_ref()
-                .ok_or_else(|| anyhow!("offline mode requires --registry"))?;
-            crate::registry::pull_artifact(reg, version, &src.arch, name, local)
-        }
+        Mode::Offline => match src.registry.as_ref() {
+            Some(reg) => crate::registry::pull_artifact(reg, version, &src.arch, name, local),
+            None => bail!(
+                "{name} not present in local cache and no --registry set \
+                 (offline mode builds from the local cache / local rspacefs)"
+            ),
+        },
     }
 }
 
