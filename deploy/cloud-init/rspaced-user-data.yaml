@@ -1,0 +1,38 @@
+#cloud-config
+# rspaced.g8.lo — Fedora 43 cloud VM: the build/run/control host.
+# No source-build tools (cargo/gcc/go live on forcicd); just runtime + the
+# image-assembly tools, the compiled compose_rspaced, and the VM-control
+# harness. The persistent /data disk holds the store + repos so the OS disk
+# can be wiped without losing downloads.
+
+hostname: rspaced
+fqdn: rspaced.g8.lo
+prefer_fqdn_over_hostname: true
+
+users:
+  - name: fedora
+    groups: [wheel, adm, systemd-journal]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDWUsb0I159v27vSBuOOyQMX54iD2zuKZOOy+e5GRCJ3yONNr3Mkdyng67BNfsnvlf8kpgSi0yiaVGeXKSjkrY9YPHe0wkVW0UHZ9uZqYqgVdEzSG3Z0NNkrd/zp3jCztPad+q6iWb1R0iFlK7/h8NihOky9HXOustrtDwnvTgONwJnluxQp1zl86deKP0W9xx3Ky/Jobr3dbfOhJVK3qzF6OL6KaNjpT+hDYjh1OISzrx1jWLxFvZ4r7X2wbRhcNRyD5sTrxcs3z5Xdz/KRT0UhIj47CF4Heoiqtl/aQ5kdjpRqlmC2spJ9WZinsqbb6HhZ1i8Yd2ZycDQZF+S8n1n gwest@Glenns-MacBook-Pro.local
+
+ssh_pwauth: false
+disable_root: false
+package_update: false
+packages:
+  - qemu-guest-agent
+  - git
+  - jq
+
+runcmd:
+  - [ systemctl, enable, --now, qemu-guest-agent ]
+  - [ install, -d, -m, "0700", /root/.ssh ]
+  - [ bash, -c, "cp /home/fedora/.ssh/authorized_keys /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys" ]
+  # Persistent data disk (scsi1 = /dev/sdb): format ONCE if blank (guarded so a
+  # preserved disk is never reformatted), label it, mount /data, persist via
+  # LABEL so it remounts after an OS wipe.
+  - [ bash, -c, "DEV=/dev/sdb; if ! blkid \"$DEV\" >/dev/null 2>&1; then mkfs.xfs -L rspaced-data \"$DEV\"; fi; mkdir -p /data; grep -q ' /data ' /etc/fstab || echo 'LABEL=rspaced-data /data xfs defaults,nofail 0 2' >> /etc/fstab; mount -a; chown -R fedora:fedora /data" ]
+
+final_message: "rspaced.g8.lo cloud-init complete in $UPTIME seconds"
