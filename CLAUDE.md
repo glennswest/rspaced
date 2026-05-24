@@ -5,15 +5,10 @@ Holder repo for various implementations of our boot services.
 ## Subprojects
 
 ### `rspaced_agent/`
-A bootc-based implementation of the boot agent. Writes `rspacefs` as the repo, and packages a chosen version of kernel (and supporting userspace) derived from RHCOS. Acts as a drop-in replacement for the RHCOS format / RHCOS boot used by the OpenShift agent-based installer (ABI).
+The bootc-based boot agent that replaces RHCOS in the OpenShift agent-based-installer flow. Boots live (ISO or PXE), pulls assets from rspacefs (the overlayfs replacement) split across kernel / openshift-system / user registries, self-installs onto a new drive, and pivots **without a reboot** on the **same kernel**. Config and mutable state ride in PVCs (config in, push-back out) rather than ISO-embedded "write magic". See [`rspaced_agent/DESIGN.md`](./rspaced_agent/DESIGN.md). PVC/rspacefs primitives are consumed from upstream crates, not authored here.
 
 ### `compose_rspaced/`
-The build tool. Given an existing OCP online repo as input, it produces one of two artifacts:
-
-1. An **rspaced-based ISO** built with bootc.
-2. A **signed bootc artifact** that behaves like the agent-based installer (consumes the same input config surface) but whose internals are signed bootc images rather than RHCOS.
-
-Both targets are part of the move to a new bootc-based, signed boot pipeline.
+A single Rust CLI (clap-derive). Input is an RHCOS version (or `--series` to resolve latest) plus arch; output is one of: push to **qregistry**, a bootc **ISO**, a **PXE** tree, a **raw**/**qcow2** image, or raw **files**. Two source modes: **online** (pull from `mirror.openshift.com`, verify against `sha256sum.txt`, cache locally) and **offline** (pull only from qregistry). Normal pattern: populate qregistry online once, then build ISO/PXE offline with no redownloads. See [`compose_rspaced/ARTIFACTS.md`](./compose_rspaced/ARTIFACTS.md).
 
 ## Version
 
@@ -28,9 +23,14 @@ Version locations (keep in sync on every bump):
 
 - [x] Scaffold repo (`CLAUDE.md`, `README.md`, `CHANGELOG.md`, `.gitignore`, subproject dirs)
 - [x] Configure GitHub remote and push initial commit (`git@github.com:glennswest/rspaced.git`, public)
-- [ ] Flesh out `rspaced_agent/` — bootc `Containerfile`, `rspacefs` writer, kernel packaging
-- [ ] Flesh out `compose_rspaced/` — input-repo ingestion, ISO build path, signed-bootc build path
-- [ ] CI for both build targets
+- [x] Scaffold `compose_rspaced/` Rust CLI — `latest` + per-output subcommands, mirror discovery, atomic download, sha256 verify, online/offline staging (`files` output functional)
+- [x] Document artifact map (`ARTIFACTS.md`) and agent boot/pivot model (`DESIGN.md`)
+- [ ] Implement `compose_rspaced` qregistry push/pull (registry.rs stubs → real OCI client) — unblocks offline mode
+- [ ] Implement `iso` output (bootc live ISO reusing the chosen RHCOS kernel)
+- [ ] Implement `pxe` output (kernel + initramfs + rootfs reference tree)
+- [ ] Implement `raw`/`qcow2` decompression passthrough
+- [ ] Flesh out `rspaced_agent/` — bootc image, live-pivot logic, rspacefs registry wiring, PVC config/push-back
+- [ ] CI for the Rust build + both boot targets
 - [ ] First tagged release `v0.1.0` once a minimal end-to-end build works
 
 ## Conventions
