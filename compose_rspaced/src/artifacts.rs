@@ -67,7 +67,8 @@ pub const ARTIFACTS: &[Artifact] = &[
     },
 ];
 
-/// Look up an artifact by role.
+/// Look up an artifact by role. Used by the registry/output paths as they land.
+#[allow(dead_code)]
 pub fn by_role(role: &str) -> Option<&'static Artifact> {
     ARTIFACTS.iter().find(|a| a.role == role)
 }

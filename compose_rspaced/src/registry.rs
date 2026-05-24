@@ -14,7 +14,8 @@
 use anyhow::{bail, Result};
 use std::path::Path;
 
-/// Image reference for one artifact role in a registry.
+/// Image reference for one artifact role in a registry. Used once push/pull land.
+#[allow(dead_code)]
 pub fn image_ref(registry: &str, role: &str, version: &str, arch: &str) -> String {
     let base = registry.trim_end_matches('/');
     format!("{base}/rhcos-{role}:{version}-{arch}")
