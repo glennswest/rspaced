@@ -1,0 +1,79 @@
+name: release
+
+# Builds compose_rspaced and publishes an RPM (native package for the Fedora
+# rspaced.g8.lo host) plus a plain-executable tarball to the GitHub Release for
+# the tag. Runs on forcicd's runner (gated off github.com like the sibling
+# repos); the publish step pushes to github.com via GH_PAT.
+#
+# Trigger: push a v* tag, or workflow_dispatch with a `tag` input.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "release tag to publish (e.g. v0.1.0-alpha.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RSPACEFS_REF: main
+
+jobs:
+  build-publish:
+    name: build + publish rpm (x86_64)
+    if: github.server_url != 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: checkout rspacefs sibling (path dep)
+        run: git clone --depth 1 --branch "${RSPACEFS_REF}" https://github.com/glennswest/rspacefs.git ../rspacefs
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2.7.3
+
+      - name: resolve tag
+        id: tag
+        run: |
+          t="${{ inputs.tag }}"
+          [ -z "$t" ] && t="${GITHUB_REF_NAME}"
+          echo "name=$t" >>"$GITHUB_OUTPUT"
+
+      - name: build release binary
+        run: cargo build --release -p compose_rspaced
+
+      - name: package rpm + tarball
+        id: pkg
+        run: |
+          set -e
+          cargo install cargo-generate-rpm --locked
+          cargo generate-rpm -p compose_rspaced
+          mkdir -p dist
+          # RPM (cargo-generate-rpm writes under target/generate-rpm/)
+          rpm=$(ls target/generate-rpm/*.rpm | head -1)
+          cp "$rpm" dist/
+          # Plain executable tarball as a fallback form.
+          out="compose_rspaced-${{ steps.tag.outputs.name }}-x86_64-linux"
+          mkdir "$out"
+          cp target/release/compose_rspaced "$out/"
+          tar -czf "dist/${out}.tar.gz" "$out"
+          (cd dist && for f in *; do sha256sum "$f" > "$f.sha256"; done)
+          ls -l dist
+
+      - name: attach to GitHub Release (canonical)
+        uses: softprops/action-gh-release@v2.0.8
+        with:
+          repository: glennswest/rspaced
+          token: ${{ github.server_url == 'https://github.com' && secrets.GITHUB_TOKEN || secrets.GH_PAT }}
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: ${{ steps.tag.outputs.name }}
+          generate_release_notes: true
+          files: |
+            dist/*.rpm
+            dist/*.rpm.sha256
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256

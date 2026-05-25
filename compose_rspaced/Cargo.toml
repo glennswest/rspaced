@@ -23,3 +23,10 @@ hex.workspace = true
 regex.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+# RPM packaging (cargo-generate-rpm). Native delivery format for the Fedora
+# rspaced.g8.lo host. Built binary -> /usr/bin/compose_rspaced.
+[package.metadata.generate-rpm]
+assets = [
+  { source = "target/release/compose_rspaced", dest = "/usr/bin/compose_rspaced", mode = "0755" },
+]
