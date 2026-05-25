@@ -32,7 +32,8 @@ Version locations (keep in sync on every bump):
 - [x] CI: `build.yml` on forcicd (fmt/clippy/test/build green); builds on cicd, executes on rspaced.g8.lo
 - [x] Deliver to rspaced.g8.lo as an RPM via the local cicd (Forgejo release) + cleanup-then-install script — no build tools on the host
 - [x] Pull-secret auth (`--auth`) for the authenticated `ocp-v4.0-art-dev` payload; validated end-to-end on rspaced.g8.lo (release + components packed, diff_id + verity + provenance on /data)
-- [ ] Full "pull everything" (drop `--limit`, all 188 components) on rspaced.g8.lo — long/large, run in background
+- [x] Full "pull everything" — all 188 components + release image packed on rspaced.g8.lo (58G on /data); ostree-hardlink fix (rhel-coreos) + per-layer verity cache; `verify` re-checked the whole store: 189 images, 1180 blobs + 802 verity roots, 0 failures
+- [ ] Parallelize component pulls (currently sequential) + mirror separate OLM/catalog operators (not in the release payload)
 - [ ] `snotest` VM-control harness (instance qpve scripts for pve.g8.lo/snotest.g8.lo) + provision snotest.g8.lo (VMID 121 @ .161)
 - [ ] CI test job (`self-hosted` runner) orchestrating across rspaced.g8.lo + snotest.g8.lo; agent-installer monitor in an LXC
 - [ ] Image patch: make CoreOS boot on rspacefs ("rustfs") — `mount_program`/storage.conf + kernel args + boot-time ordering (before CRI-O); version-sweep ready
