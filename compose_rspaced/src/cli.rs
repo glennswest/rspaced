@@ -62,6 +62,11 @@ pub struct ReleaseArgs {
     /// Cap the number of component images pulled (for testing). Omit to pull all.
     #[arg(long)]
     pub limit: Option<usize>,
+    /// Pull secret / Docker config.json for authenticated registries (the OCP
+    /// component payload in ocp-v4.0-art-dev needs this; the release image is
+    /// anonymous). Without it, component pulls 401.
+    #[arg(long)]
+    pub auth: Option<PathBuf>,
 }
 
 #[derive(Args, Clone)]
@@ -145,7 +150,10 @@ fn run_release(a: ReleaseArgs) -> Result<()> {
     let image = format!("{}:{}-{}", a.image_base, a.version, a.arch);
     let reference = rspaced_oci::Reference::parse(&image)?;
     let platform = crate::mirror::mirror_arch(&a.arch).to_string();
-    let client = rspaced_oci::Client::new()?;
+    let client = match &a.auth {
+        Some(path) => rspaced_oci::Client::with_auths(rspaced_oci::load_docker_config(path)?)?,
+        None => rspaced_oci::Client::new()?,
+    };
 
     tracing::info!(%image, platform = %platform, store = %a.store.display(), "packing release payload");
     let packed = rspaced_pack::pack_release(

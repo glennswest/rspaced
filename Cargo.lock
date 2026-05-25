@@ -938,6 +938,7 @@ name = "rspaced-oci"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "hex",
  "reqwest",
  "serde",
@@ -965,7 +966,7 @@ dependencies = [
 
 [[package]]
 name = "rspacefs-verity"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",

@@ -14,10 +14,12 @@
 //! verification. Packing pulled layers into rspacefs layer directories lives
 //! in a separate crate.
 
+mod auth;
 mod client;
 mod digest;
 mod types;
 
+pub use auth::load_docker_config;
 pub use client::{Client, Reference};
 pub use digest::Digest;
 pub use types::{

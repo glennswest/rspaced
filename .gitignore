@@ -37,3 +37,9 @@ out/
 *.log
 tmp/
 temp/
+
+# Pull secrets / registry auth (NEVER commit)
+pull-secret*.json
+pullsecret*.json
+*auth.json
+auths.json

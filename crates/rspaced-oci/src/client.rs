@@ -93,24 +93,21 @@ pub enum ManifestOrIndex {
 /// tokens are cached per `service+scope`.
 pub struct Client {
     http: HttpClient,
-    /// Optional `(username, password)` for registries that need basic creds
-    /// in the token exchange.
-    basic: Option<(String, String)>,
+    /// Per-registry `(username, password)` (keyed by registry host / token
+    /// `service`) used as basic auth in the token exchange. Empty = anonymous.
+    auths: HashMap<String, (String, String)>,
     tokens: Mutex<HashMap<String, String>>,
 }
 
 impl Client {
     /// Anonymous client.
     pub fn new() -> Result<Self> {
-        Self::build(None)
+        Self::with_auths(HashMap::new())
     }
 
-    /// Client that supplies basic credentials during token exchange.
-    pub fn with_basic(username: impl Into<String>, password: impl Into<String>) -> Result<Self> {
-        Self::build(Some((username.into(), password.into())))
-    }
-
-    fn build(basic: Option<(String, String)>) -> Result<Self> {
+    /// Client with per-registry credentials (e.g. from a Docker config.json /
+    /// pull secret via [`crate::load_docker_config`]). Keys are registry hosts.
+    pub fn with_auths(auths: HashMap<String, (String, String)>) -> Result<Self> {
         let http = HttpClient::builder()
             .timeout(Duration::from_secs(600))
             .user_agent("rspaced-oci")
@@ -118,7 +115,7 @@ impl Client {
             .context("building HTTP client")?;
         Ok(Self {
             http,
-            basic,
+            auths,
             tokens: Mutex::new(HashMap::new()),
         })
     }
@@ -261,11 +258,14 @@ impl Client {
             .unwrap_or(fallback_scope);
 
         let mut req = self.http.get(realm);
-        if let Some(service) = params.get("service") {
-            req = req.query(&[("service", service.as_str())]);
+        let service = params.get("service").map(String::as_str);
+        if let Some(svc) = service {
+            req = req.query(&[("service", svc)]);
         }
         req = req.query(&[("scope", scope)]);
-        if let Some((u, p)) = &self.basic {
+        // Basic auth to the token endpoint using this registry's pull-secret
+        // creds (keyed by the challenge's `service`), if we have them.
+        if let Some((u, p)) = service.and_then(|svc| self.auths.get(svc)) {
             req = req.basic_auth(u, Some(p));
         }
 
