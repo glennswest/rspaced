@@ -30,8 +30,9 @@ Version locations (keep in sync on every bump):
 - [x] Full release payload pull + provenance (`compose_rspaced release`): content-addressed OCI store + per-layer compressed-digest → diff_id → verity chain + provenance JSON (validated bounded, blocked only on root for 0000 files locally)
 - [x] Provision `rspaced.g8.lo` build/run/control host (VMID 120 @ .160, Fedora 43, persistent /data); assets in `deploy/`
 - [x] CI: `build.yml` on forcicd (fmt/clippy/test/build green); builds on cicd, executes on rspaced.g8.lo
-- [ ] Deliver the built binary to rspaced.g8.lo (publish from CI: OCI image to local registry or release asset) so it runs without build tools
-- [ ] Run the full "pull everything" on rspaced.g8.lo as root (reads 0000 files; data on /data) — the real provenance test
+- [x] Deliver to rspaced.g8.lo as an RPM via the local cicd (Forgejo release) + cleanup-then-install script — no build tools on the host
+- [x] Pull-secret auth (`--auth`) for the authenticated `ocp-v4.0-art-dev` payload; validated end-to-end on rspaced.g8.lo (release + components packed, diff_id + verity + provenance on /data)
+- [ ] Full "pull everything" (drop `--limit`, all 188 components) on rspaced.g8.lo — long/large, run in background
 - [ ] `snotest` VM-control harness (instance qpve scripts for pve.g8.lo/snotest.g8.lo) + provision snotest.g8.lo (VMID 121 @ .161)
 - [ ] CI test job (`self-hosted` runner) orchestrating across rspaced.g8.lo + snotest.g8.lo; agent-installer monitor in an LXC
 - [ ] Image patch: make CoreOS boot on rspacefs ("rustfs") — `mount_program`/storage.conf + kernel args + boot-time ordering (before CRI-O); version-sweep ready
