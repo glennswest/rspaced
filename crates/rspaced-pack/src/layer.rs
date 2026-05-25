@@ -143,6 +143,12 @@ pub fn pack_image(
         //    of the dir so verity hashes only image content).
         let dir = extracted_root.join(&hex);
         let marker = extracted_root.join(format!("{hex}.done"));
+        let verity_json = verity_dir.join(format!("{hex}.verity.json"));
+        // A fully-packed layer has both its marker and its verity manifest;
+        // shared base layers recur across components, so reuse rather than
+        // re-extract + re-hash. (`verify` is the explicit re-check.)
+        let cached = marker.exists() && verity_json.exists();
+
         let stats = if marker.exists() {
             count_tree(&dir)?
         } else {
@@ -155,12 +161,17 @@ pub fn pack_image(
         };
 
         // 4. Verity Merkle root over the extracted tree (re-checked at boot).
-        let (verity_root, verity_manifest) =
-            build_verity(&dir).with_context(|| format!("building verity for layer {hex}"))?;
-        fs::write(
-            verity_dir.join(format!("{hex}.verity.json")),
-            serde_json::to_vec_pretty(&verity_manifest)?,
-        )?;
+        let verity_root = if cached {
+            let m: rspacefs_verity::LayerManifest =
+                serde_json::from_slice(&fs::read(&verity_json)?)
+                    .with_context(|| format!("reading cached verity {hex}"))?;
+            hex::encode(m.root_hash)
+        } else {
+            let (root, manifest) =
+                build_verity(&dir).with_context(|| format!("building verity for layer {hex}"))?;
+            fs::write(&verity_json, serde_json::to_vec_pretty(&manifest)?)?;
+            root
+        };
 
         tracing::info!(
             layer = layer.digest.short_hex(),
@@ -210,19 +221,116 @@ pub fn pack_image(
 
 /// Extract one (optionally gzipped) OCI layer tar at `src` into `dest`.
 ///
-/// Uses `Archive::unpack`, which sets directory permissions only after every
-/// entry is written, so a mode-0555 dir in the image (e.g. `/root`) can't block
-/// files unpacked into it. Symlinks/hardlinks are handled and path-traversal
-/// entries are refused. Whiteout markers (`.wh.*`) extract as ordinary files —
-/// exactly what `LayerFS` expects.
+/// Manual multi-pass extraction, because `Archive::unpack` can't handle two
+/// things real OCI/ostree layers need:
+/// - **read-only directories** (e.g. `/root` mode 0555): we create dirs writable
+///   and apply their recorded mode last, so children unpack first.
+/// - **hardlinks whose target appears later / is content-addressed** (ostree
+///   images hardlink `/usr/...` to `/sysroot/ostree/repo/objects/..`): `unpack`
+///   canonicalizes the link target eagerly and fails with ENOENT. We defer
+///   hardlinks to a second pass once every regular file exists.
+///
+/// Whiteouts (`.wh.*`) extract as ordinary files; path-traversal entries are
+/// refused.
 pub fn extract_layer(src: &Path, dest: &Path) -> Result<LayerStats> {
     fs::create_dir_all(dest)?;
     let reader = open_maybe_gzip(src)?;
     let mut archive = tar::Archive::new(reader);
     archive.set_preserve_permissions(true);
     archive.set_overwrite(true);
-    archive.unpack(dest).context("unpacking layer tar")?;
-    count_tree(dest)
+
+    let mut stats = LayerStats::default();
+    let mut deferred_dirs: Vec<(PathBuf, u32)> = Vec::new();
+    let mut hardlinks: Vec<(PathBuf, PathBuf)> = Vec::new();
+
+    for entry in archive.entries().context("reading layer tar")? {
+        let mut entry = entry.context("reading tar entry")?;
+        let etype = entry.header().entry_type();
+        let path = entry
+            .path()
+            .context("decoding tar entry path")?
+            .into_owned();
+        let Some(rel) = safe_rel(&path) else {
+            tracing::warn!(path = %path.display(), "skipped unsafe tar entry");
+            continue;
+        };
+        let target = dest.join(&rel);
+
+        if rel
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with(".wh."))
+        {
+            stats.whiteouts += 1;
+        }
+
+        if etype.is_dir() {
+            fs::create_dir_all(&target)?;
+            if let Ok(mode) = entry.header().mode() {
+                deferred_dirs.push((target, mode & 0o7777));
+            }
+            continue;
+        }
+
+        if etype == tar::EntryType::Link {
+            // Hardlink — defer; its target may not be extracted yet.
+            if let Some(link) = entry.link_name().ok().flatten() {
+                if let Some(tgt) = safe_rel(&link) {
+                    if let Some(parent) = target.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    hardlinks.push((target, dest.join(tgt)));
+                    stats.entries += 1;
+                }
+            }
+            continue;
+        }
+
+        // Regular file / symlink / etc. — ensure parent exists, then unpack.
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        match entry.unpack_in(dest).context("unpacking tar entry")? {
+            true => stats.entries += 1,
+            false => tracing::warn!(path = %path.display(), "skipped unsafe tar entry"),
+        }
+    }
+
+    // Pass 2: hardlinks — targets exist now.
+    for (link, tgt) in hardlinks {
+        let _ = fs::remove_file(&link);
+        if let Err(e) = fs::hard_link(&tgt, &link) {
+            if tgt.exists() {
+                fs::copy(&tgt, &link)
+                    .with_context(|| format!("copy-fallback hardlink {}", link.display()))?;
+            } else {
+                tracing::warn!(link = %link.display(), target = %tgt.display(), error = %e, "hardlink target missing");
+            }
+        }
+    }
+
+    // Pass 3: apply directory modes deepest-first (kept writable until now).
+    deferred_dirs.sort_by_key(|(p, _)| std::cmp::Reverse(p.components().count()));
+    for (p, mode) in deferred_dirs {
+        let _ = fs::set_permissions(&p, fs::Permissions::from_mode(mode));
+    }
+
+    Ok(stats)
+}
+
+/// Sanitize a tar entry path to a relative path under the dest dir; rejects
+/// absolute paths and any `..`/prefix components (traversal).
+fn safe_rel(p: &Path) -> Option<PathBuf> {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::Normal(s) => out.push(s),
+            Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    (!out.as_os_str().is_empty()).then_some(out)
 }
 
 /// Open `src`, transparently gunzipping if it has the gzip magic.
