@@ -20,6 +20,10 @@ pub enum Command {
     /// Pull and pack an entire OpenShift release payload (release image + every
     /// component image from the Red Hat registry) into a provenance-tracked store.
     Release(ReleaseArgs),
+    /// Verify a packed store against its recorded provenance (blob digests +
+    /// per-layer verity roots). Run as root (extracted layers contain 0600/0000
+    /// files). Exits non-zero on any mismatch.
+    Verify(VerifyArgs),
     /// Push the artifact set to a qregistry (the offline cache / source of truth).
     Registry(SourceArgs),
     /// Build a bootc-based live ISO.
@@ -67,6 +71,13 @@ pub struct ReleaseArgs {
     /// anonymous). Without it, component pulls 401.
     #[arg(long)]
     pub auth: Option<PathBuf>,
+}
+
+#[derive(Args)]
+pub struct VerifyArgs {
+    /// Provenance-tracked store directory to verify.
+    #[arg(long, default_value = "./store")]
+    pub store: PathBuf,
 }
 
 #[derive(Args, Clone)]
@@ -119,6 +130,7 @@ pub fn run(cli: Cli) -> Result<()> {
             Ok(())
         }
         Command::Release(a) => run_release(a),
+        Command::Verify(a) => run_verify(a),
         Command::Registry(src) => {
             let staged = crate::stage::stage(&src)?;
             crate::output::registry(&src, &staged)
@@ -144,6 +156,28 @@ pub fn run(cli: Cli) -> Result<()> {
             crate::output::files(&o.source, &staged, &o.out)
         }
     }
+}
+
+fn run_verify(a: VerifyArgs) -> Result<()> {
+    let rep = rspaced_pack::verify_store(&a.store)?;
+    println!("images:  {}", rep.images);
+    println!("blobs:   {} ok, {} fail", rep.blobs_ok, rep.blobs_fail);
+    println!("verity:  {} ok, {} fail", rep.verity_ok, rep.verity_fail);
+    for f in rep.failures.iter().take(50) {
+        println!("  FAIL {f}");
+    }
+    if rep.failures.len() > 50 {
+        println!("  … and {} more", rep.failures.len() - 50);
+    }
+    if !rep.ok() {
+        anyhow::bail!(
+            "verification FAILED: {} blob + {} verity mismatches",
+            rep.blobs_fail,
+            rep.verity_fail
+        );
+    }
+    println!("OK: store verified against provenance");
+    Ok(())
 }
 
 fn run_release(a: ReleaseArgs) -> Result<()> {
