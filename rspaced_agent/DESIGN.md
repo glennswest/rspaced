@@ -55,3 +55,25 @@ mutable state live in PVCs composed at boot, not baked into the media.
 ISO, PXE tree) in the registries; `rspaced_agent` is the runtime that consumes
 them at boot. The "same kernel" constraint here is the reason `compose_rspaced`
 always reuses the chosen RHCOS kernel rather than building its own.
+
+## Scope: at least what the agent-based installer does (if not more)
+
+The bar (set by the user): rspaced_agent must do **at least** what the
+OpenShift agent-based installer does in the RHCOS live image, and then the
+rspacefs/no-reboot extensions. Reference source lives at
+`../agentinstall/upstream/{assisted-installer,assisted-installer-agent,assisted-service}`
+— the components that run in the live image today. Map of their
+responsibilities → rspaced_agent:
+
+| agent-based installer (live image) | rspaced_agent |
+|---|---|
+| **inventory** — discover disks, CPU, mem, NICs (`assisted-installer-agent/src/inventory`) | **find the disk** + hardware discovery |
+| **validations** — disk_speed, connectivity, domain_resolution, free_addresses, ntp, container_image_availability, apivip/vips, tang | same preflight checks (at least) |
+| **next_step_runner** — execute steps the service hands it | local orchestration of the boot/install steps |
+| **install** — `coreos-installer` writes RHCOS to disk: Format/partition, `--copy-network`, embed ignition (`assisted-installer/src/ops/ops.go`) | **partition** the disk + **instance rspacefs repos** on it + **clone the bundled content live during boot** (rspacefs replaces the coreos-installer disk write) |
+| **controller** — approve CSRs, wait-for-operators, finalize (`assisted_installer_controller`) | bring the node up / finalize; CSR approval + operator readiness as needed |
+| reboot into installed system | **no reboot** — same kernel, pivot only if media is read-only |
+
+"If not more": the rspacefs delivery layer, PVC config/push-back (no
+ISO-embedded ignition write-magic), signed assets, and same-kernel in-place
+pivot are beyond what the stock installer does.
