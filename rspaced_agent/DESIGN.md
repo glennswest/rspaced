@@ -56,24 +56,31 @@ ISO, PXE tree) in the registries; `rspaced_agent` is the runtime that consumes
 them at boot. The "same kernel" constraint here is the reason `compose_rspaced`
 always reuses the chosen RHCOS kernel rather than building its own.
 
-## Scope: at least what the agent-based installer does (if not more)
+## Scope: coreos-installer is the bar; start there
 
-The bar (set by the user): rspaced_agent must do **at least** what the
-OpenShift agent-based installer does in the RHCOS live image, and then the
-rspacefs/no-reboot extensions. Reference source lives at
-`../agentinstall/upstream/{assisted-installer,assisted-installer-agent,assisted-service}`
-— the components that run in the live image today. Map of their
-responsibilities → rspaced_agent:
+The bar (user, 2026-05-24) is **coreos-installer** — the disk-write step, not
+the whole assisted-installer/agent stack. As invoked by assisted-installer
+(`../agentinstall/upstream/assisted-installer/src/ops/ops.go`):
 
-| agent-based installer (live image) | rspaced_agent |
-|---|---|
-| **inventory** — discover disks, CPU, mem, NICs (`assisted-installer-agent/src/inventory`) | **find the disk** + hardware discovery |
-| **validations** — disk_speed, connectivity, domain_resolution, free_addresses, ntp, container_image_availability, apivip/vips, tang | same preflight checks (at least) |
-| **next_step_runner** — execute steps the service hands it | local orchestration of the boot/install steps |
-| **install** — `coreos-installer` writes RHCOS to disk: Format/partition, `--copy-network`, embed ignition (`assisted-installer/src/ops/ops.go`) | **partition** the disk + **instance rspacefs repos** on it + **clone the bundled content live during boot** (rspacefs replaces the coreos-installer disk write) |
-| **controller** — approve CSRs, wait-for-operators, finalize (`assisted_installer_controller`) | bring the node up / finalize; CSR approval + operator readiness as needed |
-| reboot into installed system | **no reboot** — same kernel, pivot only if media is read-only |
+```
+coreos-installer install --insecure -i <ignition> [--copy-network] [--append-karg …] <device>
+```
 
-"If not more": the rspacefs delivery layer, PVC config/push-back (no
-ISO-embedded ignition write-magic), signed assets, and same-kernel in-place
-pivot are beyond what the stock installer does.
+i.e. coreos-installer: resolve the target **device**, write the OS image to it,
+embed the **ignition** config, copy **network**, append **kernel args**.
+
+**rspaced_agent v1 = the coreos-installer-equivalent**, where it differs:
+1. **find the disk** — resolve the target device.
+2. **partition it**.
+3. **instance the rspacefs repos** on it (kernel / openshift-system / user / data).
+4. **clone the bundled content** onto it, live during boot — this replaces
+   "write the RHCOS metal image".
+5. **config via PVC** (we can pass data now) — replaces `-i <ignition>`.
+   Network/kargs applied as needed.
+6. **same kernel, no reboot** (pivot only if media is read-only).
+
+**Deferred** (per user — "some of the agent stuff we can defer"): the
+assisted-installer-*agent* validations (disk_speed, connectivity,
+domain_resolution, free_addresses, ntp, container_image_availability,
+apivip/vips, tang) and the post-boot controller (CSR approval,
+wait-for-operators). Add these later; not the first target.
