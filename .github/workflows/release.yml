@@ -1,9 +1,9 @@
 name: release
 
 # Builds compose_rspaced and publishes an RPM (native package for the Fedora
-# rspaced.g8.lo host) plus a plain-executable tarball to the GitHub Release for
-# the tag. Runs on forcicd's runner (gated off github.com like the sibling
-# repos); the publish step pushes to github.com via GH_PAT.
+# rspaced.g8.lo host) plus a plain-executable tarball as a release on the LOCAL
+# cicd — the Forgejo instance on forcicd.g8.lo. NOT github.com (no GH_PAT): the
+# runner's own Forgejo token creates the release over the LAN.
 #
 # Trigger: push a v* tag, or workflow_dispatch with a `tag` input.
 
@@ -64,16 +64,29 @@ jobs:
           (cd dist && for f in *; do sha256sum "$f" > "$f.sha256"; done)
           ls -l dist
 
-      - name: attach to GitHub Release (canonical)
-        uses: softprops/action-gh-release@v2.0.8
-        with:
-          repository: glennswest/rspaced
-          token: ${{ github.server_url == 'https://github.com' && secrets.GITHUB_TOKEN || secrets.GH_PAT }}
-          tag_name: ${{ steps.tag.outputs.name }}
-          name: ${{ steps.tag.outputs.name }}
-          generate_release_notes: true
-          files: |
-            dist/*.rpm
-            dist/*.rpm.sha256
-            dist/*.tar.gz
-            dist/*.tar.gz.sha256
+      - name: publish release to local cicd (Forgejo)
+        env:
+          API: ${{ github.api_url }}
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          set -e
+          auth="Authorization: token ${TOKEN}"
+          # Create the release for this tag (reuse if it already exists).
+          rid=$(curl -s -X POST "${API}/repos/${REPO}/releases" -H "${auth}" \
+                  -H 'Content-Type: application/json' \
+                  -d "{\"tag_name\":\"${TAG}\",\"target_commitish\":\"main\",\"name\":\"${TAG}\",\"draft\":false,\"prerelease\":true}" \
+                | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+          if [ -z "${rid}" ]; then
+            rid=$(curl -s "${API}/repos/${REPO}/releases/tags/${TAG}" -H "${auth}" \
+                  | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+          fi
+          [ -n "${rid}" ] || { echo "could not create/find release for ${TAG}" >&2; exit 1; }
+          echo "release id ${rid}"
+          for f in dist/*; do
+            echo "uploading $(basename "$f")"
+            curl -s -X POST "${API}/repos/${REPO}/releases/${rid}/assets?name=$(basename "$f")" \
+              -H "${auth}" -F "attachment=@${f}" -o /dev/null -w "  HTTP %{http_code}\n"
+          done
+          echo "published ${TAG} to ${API%/api/v1}/${REPO}/releases"

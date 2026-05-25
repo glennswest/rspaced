@@ -4,21 +4,24 @@
 #
 # Usage:
 #   ./install-on-rspaced.sh <rpm-path-or-url>     # explicit RPM
-#   ./install-on-rspaced.sh                       # fetch latest from GitHub release
+#   ./install-on-rspaced.sh                       # fetch latest from the local
+#                                                 # cicd (Forgejo) release
 #
 # Run on rspaced.g8.lo (or via: ssh fedora@rspaced.g8.lo 'bash -s' < this).
 set -euo pipefail
 
 PKG=compose_rspaced
-REPO=glennswest/rspaced
+# Local cicd (Forgejo on forcicd.g8.lo) — NOT github.
+FORGEJO="${FORGEJO:-http://forcicd.g8.lo:3000/api/v1}"
+REPO="${REPO:-ci/rspaced}"
 RPM="${1:-}"
 
 if [[ -z "${RPM}" ]]; then
-    echo "==> resolving latest ${PKG} rpm from github.com/${REPO} releases"
-    RPM=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+    echo "==> resolving latest ${PKG} rpm from local cicd ${FORGEJO}/repos/${REPO}"
+    RPM=$(curl -fsSL "${FORGEJO}/repos/${REPO}/releases/latest" \
         | python3 -c "import json,sys; [print(a['browser_download_url']) for a in json.load(sys.stdin).get('assets',[]) if a['name'].endswith('.rpm')]" \
         | head -1)
-    [[ -n "${RPM}" ]] || { echo "no .rpm asset found in latest release" >&2; exit 1; }
+    [[ -n "${RPM}" ]] || { echo "no .rpm asset found in latest local-cicd release" >&2; exit 1; }
 fi
 echo "==> rpm: ${RPM}"
 
