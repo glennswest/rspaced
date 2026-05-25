@@ -1,0 +1,72 @@
+name: agent-bootc
+
+# Build the rspaced_agent bootc hello-world image and a bootable ISO ON
+# forcicd (bootc-image-builder needs privileged podman + loop devices, so
+# runs-on: self-hosted = the forcicd host directly). Publishes the ISO as a
+# rolling release on the LOCAL cicd (Forgejo). NEVER uses coreos-installer.
+#
+# Milestone 1: centos-bootc base (public) to prove bootc boots + serial.
+# Milestone 2 swaps the base to rhel-coreos (kernel from rspacefs).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "rspaced_agent/bootc/**"
+      - ".github/workflows/agent-bootc.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build bootc hello-world ISO
+    if: github.server_url != 'https://github.com'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build bootc image
+        run: |
+          cd rspaced_agent/bootc
+          sudo podman build -t localhost/rspaced-agent:hello .
+
+      - name: bootc-image-builder -> ISO
+        run: |
+          rm -rf agent-out && mkdir -p agent-out
+          sudo podman run --rm --privileged \
+            --security-opt label=type:unconfined_t \
+            -v "$PWD/agent-out":/output \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            build --type iso --local localhost/rspaced-agent:hello
+          iso=$(find agent-out -name '*.iso' | head -1)
+          [ -n "$iso" ] || { echo "no ISO produced"; exit 1; }
+          cp "$iso" agent-out/rspaced-agent-hello.iso
+          ls -lh agent-out/rspaced-agent-hello.iso
+
+      - name: publish ISO to local cicd (Forgejo) release
+        env:
+          API: ${{ github.api_url }}
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          TAG=agent-hello
+          ISO="$PWD/agent-out/rspaced-agent-hello.iso"
+          auth="Authorization: token ${TOKEN}"
+          rid=$(curl -s -X POST "${API}/repos/${REPO}/releases" -H "${auth}" \
+                  -H 'Content-Type: application/json' \
+                  -d "{\"tag_name\":\"${TAG}\",\"target_commitish\":\"main\",\"name\":\"${TAG}\",\"draft\":false,\"prerelease\":true}" \
+                | python3 -c "import json,sys;print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
+          [ -z "${rid}" ] && rid=$(curl -s "${API}/repos/${REPO}/releases/tags/${TAG}" -H "${auth}" \
+                | python3 -c "import json,sys;print(json.load(sys.stdin).get('id',''))")
+          [ -n "${rid}" ] || { echo "no release id"; exit 1; }
+          # Overwrite any existing same-named asset.
+          curl -s "${API}/repos/${REPO}/releases/${rid}/assets" -H "${auth}" \
+            | python3 -c "import json,sys;[print(a['id']) for a in json.load(sys.stdin) if a['name']=='rspaced-agent-hello.iso']" \
+            | while read aid; do curl -s -X DELETE "${API}/repos/${REPO}/releases/${rid}/assets/${aid}" -H "${auth}"; done
+          curl -s -X POST "${API}/repos/${REPO}/releases/${rid}/assets?name=rspaced-agent-hello.iso" \
+            -H "${auth}" -F "attachment=@${ISO}" -o /dev/null -w "upload HTTP %{http_code}\n"
+          echo "published agent-hello ISO to local cicd"

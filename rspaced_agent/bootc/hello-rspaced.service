@@ -1,0 +1,14 @@
+[Unit]
+Description=rspaced_agent hello world (bootc boot proof)
+After=basic.target
+Wants=basic.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+StandardOutput=journal+console
+StandardError=journal+console
+ExecStart=/bin/bash -c 'echo; echo "================================================"; echo " HELLO WORLD - rspaced_agent bootc booted OK"; echo " $(uname -srm)   $(date)"; echo "================================================"'
+
+[Install]
+WantedBy=multi-user.target

@@ -84,3 +84,28 @@ assisted-installer-*agent* validations (disk_speed, connectivity,
 domain_resolution, free_addresses, ntp, container_image_availability,
 apivip/vips, tang) and the post-boot controller (CSR approval,
 wait-for-operators). Add these later; not the first target.
+
+## rspaced_agent build order (user, 2026-05-25)
+
+The agent is a **bootc app** — it *is* the boot logic and the **GRUB
+replacement**. We write our own; **never use `coreos-installer`** (we may
+**port its Rust code** for disk/partition handling, but never invoke it — see
+[[feedback-no-coreos-installer]]).
+
+1. **Hello world** — a bootc app that boots and prints to **console and/or
+   serial**. Just prove the bootc path + console output. Console/serial kargs
+   come from the bootc image's `kargs.d`, NOT coreos-installer.
+2. **Kernel from rspacefs** — kernel + initramfs are images inside rspacefs
+   (kernel registry); the bootc app brings them up, wired to rspacefs.
+3. **State check** — *am I on boot media, or already resident on disk?*
+4. **If boot media:** determine the target disk (hardcoded default now; a
+   **YAML** later, like the assisted agent — cribbing it is worthwhile) →
+   **format** → **set up rspacefs** for the types (kernel/openshift-system/
+   user/data) → **copy the bootc app in** (replaces GRUB, so a **reboot just
+   works without reformatting**) → **pivot** and continue the normal SNO process.
+5. **Agent (assisted-installer-agent) is optional** — bare-metal install must
+   work without it; its diagnostics + progress reporting are a nice-to-have to
+   copy in later.
+
+Console/kargs/config are set the bootc-native way (image `kargs.d`, PVC for
+config) — never by hacking a stock ISO.

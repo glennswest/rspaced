@@ -1,0 +1,16 @@
+# rspaced_agent — bootc hello-world (milestone 1: boot + console/serial output).
+#
+# Built FROM a bootc base (default: the rhel-coreos image from our content, so
+# the RHCOS kernel comes from rspacefs). Console/serial kernel args are set the
+# bootc-native way via /usr/lib/bootc/kargs.d — NEVER via coreos-installer.
+ARG BASE=quay.io/centos-bootc/centos-bootc:stream9
+FROM ${BASE}
+
+# tty0 (graphical) + ttyS0 (serial, primary) so the boot is observable both ways.
+COPY kargs.d/10-console.toml /usr/lib/bootc/kargs.d/10-console.toml
+
+# Print a banner to the console on boot — the "hello world" proof.
+COPY hello-rspaced.service /usr/lib/systemd/system/hello-rspaced.service
+RUN systemctl enable hello-rspaced.service
+
+LABEL org.rspaced.agent="hello-world"

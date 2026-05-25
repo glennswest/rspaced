@@ -1,0 +1,2 @@
+# bootc-native kernel args (NOT coreos-installer). Serial last = primary console.
+kargs = ["console=tty0", "console=ttyS0,115200n8"]
