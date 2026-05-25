@@ -16,6 +16,7 @@
 //! the runtime overlayfs replacement and qregistry); this crate only produces
 //! the layer directories it stacks.
 
+pub mod coreos;
 pub mod layer;
 pub mod payload;
 pub mod provenance;
@@ -23,6 +24,7 @@ pub mod release;
 pub mod store;
 pub mod verify;
 
+pub use coreos::{extract_coreos_iso, CoreosIso};
 pub use layer::{extract_layer, pack_image, LayerStats, PackedImage};
 pub use payload::{pack_release, PackOptions, PackedComponent, PackedRelease};
 pub use provenance::{ImageProvenance, LayerProvenance, ReleaseProvenance};

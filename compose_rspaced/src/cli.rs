@@ -26,8 +26,9 @@ pub enum Command {
     Verify(VerifyArgs),
     /// Push the artifact set to a qregistry (the offline cache / source of truth).
     Registry(SourceArgs),
-    /// Build a bootc-based live ISO.
-    Iso(OutArgs),
+    /// Emit the bootable CoreOS live ISO from a packed store (verified against
+    /// its sha256). First bootc-assembly milestone: boot CoreOS + podman.
+    Iso(IsoArgs),
     /// Build a PXE-bootable tree (kernel + initrd + rootfs reference).
     Pxe(OutArgs),
     /// Emit the metal raw disk image.
@@ -78,6 +79,16 @@ pub struct VerifyArgs {
     /// Provenance-tracked store directory to verify.
     #[arg(long, default_value = "./store")]
     pub store: PathBuf,
+}
+
+#[derive(Args)]
+pub struct IsoArgs {
+    /// Packed store to assemble from.
+    #[arg(long, default_value = "./store")]
+    pub store: PathBuf,
+    /// Output ISO path.
+    #[arg(long)]
+    pub out: PathBuf,
 }
 
 #[derive(Args, Clone)]
@@ -135,10 +146,7 @@ pub fn run(cli: Cli) -> Result<()> {
             let staged = crate::stage::stage(&src)?;
             crate::output::registry(&src, &staged)
         }
-        Command::Iso(o) => {
-            let staged = crate::stage::stage(&o.source)?;
-            crate::output::iso(&o.source, &staged, &o.out)
-        }
+        Command::Iso(a) => run_iso(a),
         Command::Pxe(o) => {
             let staged = crate::stage::stage(&o.source)?;
             crate::output::pxe(&o.source, &staged, &o.out)
@@ -177,6 +185,15 @@ fn run_verify(a: VerifyArgs) -> Result<()> {
         );
     }
     println!("OK: store verified against provenance");
+    Ok(())
+}
+
+fn run_iso(a: IsoArgs) -> Result<()> {
+    let iso = rspaced_pack::extract_coreos_iso(&a.store, &a.out)?;
+    println!("coreos iso: {}", iso.out.display());
+    println!("source:     {}", iso.source.display());
+    println!("sha256:     {}", iso.sha256);
+    println!("size:       {} MiB", iso.size / (1024 * 1024));
     Ok(())
 }
 

@@ -40,12 +40,8 @@ pub fn registry(src: &SourceArgs, staged: &Staged) -> Result<()> {
     Ok(())
 }
 
-/// Build a bootc-based live ISO. Stub.
-pub fn iso(_src: &SourceArgs, _staged: &Staged, _out: &Path) -> Result<()> {
-    // TODO: assemble a bootc image reusing the staged kernel/initramfs/rootfs
-    // (same kernel as the chosen RHCOS version) and convert it to a live ISO.
-    bail!("`iso` output not yet implemented")
-}
+// The `iso` output is now assembled from a packed store — see
+// `rspaced_pack::extract_coreos_iso` and `cli::run_iso`.
 
 /// Build a PXE-bootable tree. Stub.
 pub fn pxe(_src: &SourceArgs, _staged: &Staged, _out: &Path) -> Result<()> {
