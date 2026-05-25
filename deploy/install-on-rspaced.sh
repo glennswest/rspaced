@@ -17,11 +17,17 @@ REPO="${REPO:-ci/rspaced}"
 RPM="${1:-}"
 
 if [[ -z "${RPM}" ]]; then
-    echo "==> resolving latest ${PKG} rpm from local cicd ${FORGEJO}/repos/${REPO}"
-    RPM=$(curl -fsSL "${FORGEJO}/repos/${REPO}/releases/latest" \
-        | python3 -c "import json,sys; [print(a['browser_download_url']) for a in json.load(sys.stdin).get('assets',[]) if a['name'].endswith('.rpm')]" \
-        | head -1)
-    [[ -n "${RPM}" ]] || { echo "no .rpm asset found in latest local-cicd release" >&2; exit 1; }
+    echo "==> resolving newest ${PKG} rpm from local cicd ${FORGEJO}/repos/${REPO}"
+    # Use the releases list (newest first); /releases/latest skips prereleases.
+    RPM=$(curl -fsSL "${FORGEJO}/repos/${REPO}/releases?limit=10" \
+        | python3 -c "
+import json,sys
+for r in json.load(sys.stdin):
+    for a in r.get('assets', []):
+        if a['name'].endswith('.rpm'):
+            print(a['browser_download_url']); sys.exit(0)
+")
+    [[ -n "${RPM}" ]] || { echo "no .rpm asset found in local-cicd releases" >&2; exit 1; }
 fi
 echo "==> rpm: ${RPM}"
 
