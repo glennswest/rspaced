@@ -27,14 +27,20 @@ Version locations (keep in sync on every bump):
 - [x] Document artifact map (`ARTIFACTS.md`) and agent boot/pivot model (`DESIGN.md`)
 - [x] Convert to cargo workspace; add `crates/rspaced-oci` (OCI pull client + image types ported from fastregistry, anonymous quay.io bearer auth, validated live)
 - [x] Add `crates/rspaced-pack` — pull image → extract layers into rspacefs layer dirs (`LayerFS` order, whiteouts preserved) + release `image-references` discovery (validated live: 188 components)
-- [ ] Pull the full release payload (loop component images from `image-references`) + RHCOS/`machine-os-images`; dedup, parallelize
+- [x] Full release payload pull + provenance (`compose_rspaced release`): content-addressed OCI store + per-layer compressed-digest → diff_id → verity chain + provenance JSON (validated bounded, blocked only on root for 0000 files locally)
+- [x] Provision `rspaced.g8.lo` build/run/control host (VMID 120 @ .160, Fedora 43, persistent /data); assets in `deploy/`
+- [x] CI: `build.yml` on forcicd (fmt/clippy/test/build green); builds on cicd, executes on rspaced.g8.lo
+- [ ] Deliver the built binary to rspaced.g8.lo (publish from CI: OCI image to local registry or release asset) so it runs without build tools
+- [ ] Run the full "pull everything" on rspaced.g8.lo as root (reads 0000 files; data on /data) — the real provenance test
+- [ ] `snotest` VM-control harness (instance qpve scripts for pve.g8.lo/snotest.g8.lo) + provision snotest.g8.lo (VMID 121 @ .161)
+- [ ] CI test job (`self-hosted` runner) orchestrating across rspaced.g8.lo + snotest.g8.lo; agent-installer monitor in an LXC
+- [ ] Image patch: make CoreOS boot on rspacefs ("rustfs") — `mount_program`/storage.conf + kernel args + boot-time ordering (before CRI-O); version-sweep ready
 - [ ] Stack packed layer dirs into a local rspacefs via `rspacefs-core` `LayerFS`
 - [ ] Wire `compose_rspaced` registry push/pull to `rspaced-oci` — unblocks offline mode
 - [ ] Implement `iso` output: gather signed assets → embed local rspacefs → bootc wrapper via bootc-image-builder (boots an already-installed live system; same RHCOS kernel; PVC config, no ISO write-magic)
 - [ ] Implement `pxe` output (kernel + initramfs + rootfs reference tree)
 - [ ] Implement `raw`/`qcow2` decompression passthrough
 - [ ] Flesh out `rspaced_agent/` — bootc image, live-pivot logic, rspacefs registry wiring, PVC config/push-back
-- [ ] CI for the Rust build + both boot targets
 - [ ] First tagged release `v0.1.0` once a minimal end-to-end build works
 
 ## Conventions
