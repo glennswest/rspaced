@@ -110,30 +110,29 @@ replacement**. We write our own; **never use `coreos-installer`** (we may
 Console/kargs/config are set the bootc-native way (image `kargs.d`, PVC for
 config) — never by hacking a stock ISO.
 
-## The bootc image: build FROM scratch (minimal, no OS distro)
+## Boot model (LOCKED, user 2026-05-25): OpenShift's kernel+initramfs + composefs flow
 
-Per the bootc docs (`bootc.dev` / Fedora "building from scratch", RHEL image-mode
-docs), a minimal bootc image is built in two stages — **not** with
-bootc-image-builder and **not** from a full distro:
+Do **not** build a bootc/OS image and do **not** bake or load a separate
+kernel (no bootc-image-builder, no coreos-installer, no stub+kexec, no UEFI
+rspacefs — all rejected). Instead:
 
-```dockerfile
-FROM quay.io/centos-bootc/centos-bootc:stream9 AS builder
-RUN /usr/libexec/bootc-base-imagectl build-rootfs --manifest=minimal /target-rootfs
-FROM scratch
-COPY --from=builder /target-rootfs/ /
-# ... our additions ...
-LABEL containers.bootc="1"  ostree.bootable="1"
-CMD ["/sbin/init"]
-```
+- **Boot the exact RHCOS kernel + initramfs OpenShift uses** — the ones from the
+  payload we already pulled into rspacefs (machine-os-images / rhel-coreos).
+  That's the same kernel as the release, so the kernel invariant holds for free:
+  the kernel we boot *is* the kernel the system runs on. No second kernel.
+- **Our agent runs inside that initramfs** (we manipulate the initramfs to add
+  it) and does **formatting, rspacefs setup, and the transition/pivot** — all on
+  that one kernel.
+- **Follow the composefs boot flow** (rspacefs is our analog of composefs):
+  - composefs: in the initramfs, `mount.composefs IMAGE TARGET -o basedir=…,digest=<fs-verity>` mounts a content-addressed root (EROFS metadata + content basedir) as overlayfs, **validating the fs-verity digest pinned on the kernel cmdline** (chain of trust), with `upperdir`/`workdir` for the writable layer; then `switch_root`.
+  - rspaced: the agent mounts the **rspacefs** root (LayerFS + verity, digest pinned on the cmdline) the same way and `switch_root`s in. This keeps provenance unbroken right through the pivot (the verity root we recorded at pack time is checked at mount).
+  - Crib `composefs` (`mount.composefs`, the boot flow) and `composefs-rs` (Rust) for the repo/mount logic.
 
-- `--manifest=minimal` = just **bootc + systemd + kernel + dnf** + hard deps (no OS).
-- kernel/initramfs live at **`/usr/lib/modules/$kver/{vmlinuz,initramfs.img}`** — nothing in `/boot` (bootc copies it).
-- build flags: `podman build --cap-add=all --security-opt=label=type:container_runtime_t --device /dev/fuse` (and forcicd's `bootc-c9s` runner is already privileged — forcicd#3).
+**Therefore the boot media is just: RHCOS `vmlinuz` + a (modified) `initramfs`
+carrying the agent.** One agent works for every release; the kernel/initramfs
+are content-addressed images in rspacefs, so updating either is just a new image.
 
-**rspaced-specific requirements (user, 2026-05-25):**
-1. **Use the RHCOS kernel for the specced OCP version** — not centos's. Source `/usr/lib/modules/$kver` (vmlinuz + modules + initramfs) from our **rhel-coreos** image (version-pinned, in rspacefs) and replace the minimal-manifest kernel. (CI build needs the pull secret to `FROM` the authed rhel-coreos base — a Forgejo secret; prerequisite.)
-2. **initramfs is manipulable** — we may modify it as needed (wire rspacefs early, etc.).
-3. **We can include our own containers** in the image / rspacefs.
-4. **Adjust podman to use rspacefs** — drop in `/etc/containers/storage.conf` with `mount_program = /usr/bin/rspacefs-mount` + `additionalimagestores` (per `rspacefs/docs/openshift-integration.md`). Needs the `rspacefs-mount` binary in the image. (Later milestone, not the hello-world.)
-
-Milestone 1 (hello world) just needs: minimal-from-scratch + the **RHCOS kernel** + console kargs + a banner unit. podman→rspacefs and initramfs work come after.
+Build/test path (to confirm): take `vmlinuz` + `initramfs` from the packed
+payload, inject the agent into the initramfs, boot snotest off them with
+`console=ttyS0` on the cmdline, agent prints hello → then grows into
+find-disk/format/rspacefs-setup/mount-root(composefs-flow)/switch_root.
