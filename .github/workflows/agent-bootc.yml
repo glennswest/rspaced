@@ -1,72 +1,52 @@
 name: agent-bootc
 
-# Build the rspaced_agent bootc hello-world image + a bootable ISO on forcicd,
-# using the blessed recipe from forcicd#3: runs-on bootc-c9s (per-job container
-# already runs --privileged + /dev/fuse as root, so bootc-image-builder gets
-# loop/mount), no sudo, --local reads the image from the job's container
-# storage. Publishes the ISO to the LOCAL cicd (Forgejo). NEVER coreos-installer.
+# Build the minimal FROM-scratch rspaced_agent bootc image on forcicd's
+# bootc-c9s runner (privileged per forcicd#3) and push it to the local
+# registry. The kernel is the RHCOS kernel for the specced OCP version, sourced
+# from the (authed) rhel-coreos base — so the runner needs the pull secret.
+# NEVER bootc-image-builder / coreos-installer.
 #
-# Milestone 1: centos-bootc base (Containerfile default). Milestone 2 swaps to
-# a rhel-coreos base (kernel from rspacefs).
+# Prerequisites:
+#   - Forgejo secret PULL_SECRET = the OCP pull secret (Docker config.json),
+#     so the bootc-c9s runner can pull the rhel-coreos base.
+#   - dispatch input `rhcos` = the version-pinned rhel-coreos digest ref.
+#
+# Dispatch-only (no push trigger) so it never auto-fails before the secret is set.
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "rspaced_agent/bootc/**"
-      - ".github/workflows/agent-bootc.yml"
+    inputs:
+      rhcos:
+        description: "version-pinned rhel-coreos ref (quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:...)"
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
-    name: build bootc hello-world ISO
+    name: build from-scratch bootc image (RHCOS kernel)
     if: github.server_url != 'https://github.com'
     runs-on: bootc-c9s
     steps:
       - uses: actions/checkout@v4
 
-      - name: build bootc image
-        working-directory: rspaced_agent/bootc
-        run: podman build -t localhost/rspaced-agent:hello -f Containerfile .
-
-      - name: bootc-image-builder -> ISO
-        working-directory: rspaced_agent/bootc
-        run: |
-          rm -rf out && mkdir -p out
-          podman run --rm --privileged \
-            --security-opt seccomp=unconfined \
-            -v "$PWD/out:/output" \
-            -v /var/lib/containers/storage:/var/lib/containers/storage \
-            quay.io/centos-bootc/bootc-image-builder:latest \
-              build --type iso --local localhost/rspaced-agent:hello
-          iso=$(find out -name '*.iso' | head -1)
-          [ -n "$iso" ] || { echo "no ISO produced"; exit 1; }
-          cp "$iso" out/rspaced-agent-hello.iso
-          ls -lh out/rspaced-agent-hello.iso
-
-      - name: publish ISO to local cicd (Forgejo) release
+      - name: registry auth for the rhel-coreos base
         env:
-          API: ${{ github.api_url }}
-          REPO: ${{ github.repository }}
-          TOKEN: ${{ github.token }}
+          PULL_SECRET: ${{ secrets.PULL_SECRET }}
         run: |
-          set -e
-          TAG=agent-hello
-          ISO="$PWD/rspaced_agent/bootc/out/rspaced-agent-hello.iso"
-          auth="Authorization: token ${TOKEN}"
-          rid=$(curl -s -X POST "${API}/repos/${REPO}/releases" -H "${auth}" \
-                  -H 'Content-Type: application/json' \
-                  -d "{\"tag_name\":\"${TAG}\",\"target_commitish\":\"main\",\"name\":\"${TAG}\",\"draft\":false,\"prerelease\":true}" \
-                | python3 -c "import json,sys;print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
-          [ -z "${rid}" ] && rid=$(curl -s "${API}/repos/${REPO}/releases/tags/${TAG}" -H "${auth}" \
-                | python3 -c "import json,sys;print(json.load(sys.stdin).get('id',''))")
-          [ -n "${rid}" ] || { echo "no release id"; exit 1; }
-          curl -s "${API}/repos/${REPO}/releases/${rid}/assets" -H "${auth}" \
-            | python3 -c "import json,sys;[print(a['id']) for a in json.load(sys.stdin) if a['name']=='rspaced-agent-hello.iso']" \
-            | while read aid; do curl -s -X DELETE "${API}/repos/${REPO}/releases/${rid}/assets/${aid}" -H "${auth}"; done
-          curl -s -X POST "${API}/repos/${REPO}/releases/${rid}/assets?name=rspaced-agent-hello.iso" \
-            -H "${auth}" -F "attachment=@${ISO}" -o /dev/null -w "upload HTTP %{http_code}\n"
-          echo "published agent-hello ISO to local cicd"
+          install -d -m700 "$HOME/.config/containers"
+          printf '%s' "$PULL_SECRET" > "$HOME/.config/containers/auth.json"
+
+      - name: build (minimal FROM-scratch + RHCOS kernel)
+        working-directory: rspaced_agent/bootc
+        run: |
+          podman build \
+            --cap-add=all --security-opt=label=type:container_runtime_t --device /dev/fuse \
+            --authfile "$HOME/.config/containers/auth.json" \
+            --build-arg RHCOS='${{ inputs.rhcos }}' \
+            -t forcicd.g8.lo:5000/rspaced-agent:hello -f Containerfile .
+
+      - name: push to local registry
+        run: podman push --tls-verify=false forcicd.g8.lo:5000/rspaced-agent:hello

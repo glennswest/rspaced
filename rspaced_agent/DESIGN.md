@@ -109,3 +109,31 @@ replacement**. We write our own; **never use `coreos-installer`** (we may
 
 Console/kargs/config are set the bootc-native way (image `kargs.d`, PVC for
 config) — never by hacking a stock ISO.
+
+## The bootc image: build FROM scratch (minimal, no OS distro)
+
+Per the bootc docs (`bootc.dev` / Fedora "building from scratch", RHEL image-mode
+docs), a minimal bootc image is built in two stages — **not** with
+bootc-image-builder and **not** from a full distro:
+
+```dockerfile
+FROM quay.io/centos-bootc/centos-bootc:stream9 AS builder
+RUN /usr/libexec/bootc-base-imagectl build-rootfs --manifest=minimal /target-rootfs
+FROM scratch
+COPY --from=builder /target-rootfs/ /
+# ... our additions ...
+LABEL containers.bootc="1"  ostree.bootable="1"
+CMD ["/sbin/init"]
+```
+
+- `--manifest=minimal` = just **bootc + systemd + kernel + dnf** + hard deps (no OS).
+- kernel/initramfs live at **`/usr/lib/modules/$kver/{vmlinuz,initramfs.img}`** — nothing in `/boot` (bootc copies it).
+- build flags: `podman build --cap-add=all --security-opt=label=type:container_runtime_t --device /dev/fuse` (and forcicd's `bootc-c9s` runner is already privileged — forcicd#3).
+
+**rspaced-specific requirements (user, 2026-05-25):**
+1. **Use the RHCOS kernel for the specced OCP version** — not centos's. Source `/usr/lib/modules/$kver` (vmlinuz + modules + initramfs) from our **rhel-coreos** image (version-pinned, in rspacefs) and replace the minimal-manifest kernel. (CI build needs the pull secret to `FROM` the authed rhel-coreos base — a Forgejo secret; prerequisite.)
+2. **initramfs is manipulable** — we may modify it as needed (wire rspacefs early, etc.).
+3. **We can include our own containers** in the image / rspacefs.
+4. **Adjust podman to use rspacefs** — drop in `/etc/containers/storage.conf` with `mount_program = /usr/bin/rspacefs-mount` + `additionalimagestores` (per `rspacefs/docs/openshift-integration.md`). Needs the `rspacefs-mount` binary in the image. (Later milestone, not the hello-world.)
+
+Milestone 1 (hello world) just needs: minimal-from-scratch + the **RHCOS kernel** + console kargs + a banner unit. podman→rspacefs and initramfs work come after.
