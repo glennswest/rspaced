@@ -934,6 +934,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rspaced-agent"
+version = "0.1.0"
+
+[[package]]
 name = "rspaced-oci"
 version = "0.1.0"
 dependencies = [

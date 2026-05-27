@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["compose_rspaced", "crates/rspaced-oci", "crates/rspaced-pack"]
+members = ["compose_rspaced", "crates/rspaced-oci", "crates/rspaced-pack", "rspaced_agent"]
 
 [workspace.package]
 edition = "2021"
