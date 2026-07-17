@@ -970,7 +970,8 @@ dependencies = [
 
 [[package]]
 name = "rspacefs-verity"
-version = "0.2.0"
+version = "0.3.0"
+source = "git+https://github.com/glennswest/rspacefs?rev=71b44a746d24feb1ddedb9dd7da6381b9d683ad7#71b44a746d24feb1ddedb9dd7da6381b9d683ad7"
 dependencies = [
  "serde",
  "serde_json",

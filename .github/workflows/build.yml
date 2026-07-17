@@ -6,8 +6,8 @@ name: ci
 # the workflow_run but skips all jobs (zero GH minutes); the Forgejo mirror
 # runs everything on the LAN runner.
 #
-# rspaced has a path dependency on ../rspacefs (rspacefs-verity), so each job
-# checks out rspacefs as a sibling before any cargo command.
+# rspacefs-verity is a git-pinned dependency (see workspace Cargo.toml), so
+# cargo fetches it directly — no sibling checkout needed.
 
 on:
   push:
@@ -22,7 +22,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  RSPACEFS_REF: main
 
 jobs:
   fmt:
@@ -31,8 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: checkout rspacefs sibling (path dep)
-        run: git clone --depth 1 --branch "${RSPACEFS_REF}" https://github.com/glennswest/rspacefs.git ../rspacefs
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -44,8 +41,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: checkout rspacefs sibling (path dep)
-        run: git clone --depth 1 --branch "${RSPACEFS_REF}" https://github.com/glennswest/rspacefs.git ../rspacefs
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -58,8 +53,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: checkout rspacefs sibling (path dep)
-        run: git clone --depth 1 --branch "${RSPACEFS_REF}" https://github.com/glennswest/rspacefs.git ../rspacefs
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2.7.3
       - run: cargo test --workspace --all-targets
@@ -70,8 +63,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: checkout rspacefs sibling (path dep)
-        run: git clone --depth 1 --branch "${RSPACEFS_REF}" https://github.com/glennswest/rspacefs.git ../rspacefs
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-gnu

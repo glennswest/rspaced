@@ -19,13 +19,19 @@ base64 = "0.22"
 regex = "1"
 flate2 = "1"
 tar = "0.4"
-# Consumed from the sibling rspacefs repo (do not author here). Interim path
-# dep until rspacefs publishes / we pin a git rev for CI.
-rspacefs-verity = { path = "../rspacefs/crates/rspacefs-verity" }
+# Consumed from the rspacefs repo (do not author here). Pinned by git rev so
+# downstream consumers (stormcos) can take rspaced-oci/rspaced-pack as git
+# deps without a sibling ../rspacefs checkout. Bump the rev deliberately.
+rspacefs-verity = { git = "https://github.com/glennswest/rspacefs", rev = "71b44a746d24feb1ddedb9dd7da6381b9d683ad7" }
 reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"], default-features = false }
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Dev loop against a local sibling checkout: uncomment (don't commit) or put
+# the equivalent in ~/.cargo/config.toml.
+# [patch."https://github.com/glennswest/rspacefs"]
+# rspacefs-verity = { path = "../rspacefs/crates/rspacefs-verity" }
 
 [profile.release]
 opt-level = 3

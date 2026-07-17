@@ -22,7 +22,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  RSPACEFS_REF: main
 
 jobs:
   build-publish:
@@ -31,8 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: checkout rspacefs sibling (path dep)
-        run: git clone --depth 1 --branch "${RSPACEFS_REF}" https://github.com/glennswest/rspacefs.git ../rspacefs
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2.7.3
 

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### 2026-07-17
+- **fix (deps):** `rspacefs-verity` is now a **git-pinned dependency** (`rev = 71b44a7`) instead of a `../rspacefs` path dep, so downstream consumers (stormcos) can take `rspaced-oci`/`rspaced-pack` as git deps without a sibling checkout. Commented `[patch]` block in `Cargo.toml` documents the local-sibling dev loop. CI (`build.yml`, `release.yml`) no longer clones the rspacefs sibling. Closes [#1](https://github.com/glennswest/rspaced/issues/1).
+
 ### 2026-05-24
 - **chore:** Initial repo scaffold — `CLAUDE.md`, `README.md`, `CHANGELOG.md`, `.gitignore`, and subdirectories for `rspaced_agent` and `compose_rspaced`.
 - **chore:** Created GitHub repo `glennswest/rspaced` (public) and pushed initial commit.
