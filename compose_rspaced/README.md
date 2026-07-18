@@ -25,8 +25,13 @@ compose_rspaced latest --series 4.18 [--arch x86_64]
 # Push the artifact set to qregistry (populates the offline cache)
 compose_rspaced registry --version 4.18.30 --registry http://qregistry.gt.lo:5000
 
+# Emit the CoreOS live ISO from a packed store (see `release` below).
+# --release/--arch select which one when the store holds several; with a
+# single release in the store they can be omitted.
+compose_rspaced iso   --store ./store --out ./rspaced.iso \
+                      [--release 4.18.30] [--arch x86_64]
+
 # Build outputs (each reuses the chosen RHCOS kernel)
-compose_rspaced iso   --version 4.18.30 --out ./rspaced.iso
 compose_rspaced pxe   --version 4.18.30 --out ./pxe/
 compose_rspaced raw   --version 4.18.30 --out ./disk.raw
 compose_rspaced qcow2 --version 4.18.30 --out ./disk.qcow2

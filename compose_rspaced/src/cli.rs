@@ -89,6 +89,13 @@ pub struct IsoArgs {
     /// Output ISO path.
     #[arg(long)]
     pub out: PathBuf,
+    /// Which release to emit, when the store holds more than one: a version
+    /// substring (e.g. "4.18.30") or a release manifest digest prefix.
+    #[arg(long)]
+    pub release: Option<String>,
+    /// Which architecture to emit. Accepts either spelling (x86_64 / amd64).
+    #[arg(long)]
+    pub arch: Option<String>,
 }
 
 #[derive(Args, Clone)]
@@ -113,6 +120,12 @@ pub struct SourceArgs {
     /// Local raw-download cache directory.
     #[arg(long, default_value = "./cache")]
     pub cache: PathBuf,
+    /// Proceed even when no sha256sum.txt is available to verify staged
+    /// artifacts against (offline mode with an unpopulated cache). UNSAFE:
+    /// artifacts are consumed without any integrity check. The default is to
+    /// fail rather than build from unverified media.
+    #[arg(long, default_value_t = false)]
+    pub insecure_skip_verify: bool,
 }
 
 #[derive(Args)]
@@ -189,8 +202,16 @@ fn run_verify(a: VerifyArgs) -> Result<()> {
 }
 
 fn run_iso(a: IsoArgs) -> Result<()> {
-    let iso = rspaced_pack::extract_coreos_iso(&a.store, &a.out)?;
+    let sel = rspaced_pack::IsoSelector {
+        release: a.release,
+        arch: a.arch,
+    };
+    let iso = rspaced_pack::extract_coreos_iso(&a.store, &a.out, &sel)?;
     println!("coreos iso: {}", iso.out.display());
+    println!(
+        "release:    {}",
+        iso.release.as_deref().unwrap_or("unknown")
+    );
     println!("source:     {}", iso.source.display());
     println!("sha256:     {}", iso.sha256);
     println!("size:       {} MiB", iso.size / (1024 * 1024));

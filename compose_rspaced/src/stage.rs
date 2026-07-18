@@ -1,7 +1,7 @@
 //! Stage the RHCOS artifact set into the local cache, honoring online vs
 //! offline mode, and verify each file against the published checksums.
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -52,13 +52,25 @@ pub fn stage(src: &SourceArgs) -> Result<Staged> {
 
         if !exists_nonempty(&local)? {
             if let Err(e) = fetch_one(src, &version, &name, &local) {
-                tracing::warn!(role = art.role, error = %e, "skipped (unavailable)");
+                if art.required {
+                    return Err(e).with_context(|| {
+                        format!(
+                            "required artifact '{}' ({name}) could not be staged for \
+                             {version} ({}); a bootable image cannot be assembled without it",
+                            art.role, src.arch
+                        )
+                    });
+                }
+                tracing::warn!(role = art.role, error = %e, "skipped optional artifact (unavailable)");
                 continue;
             }
         }
 
-        if !sum_body.is_empty() {
-            crate::verify::verify_against_sumfile(&local, &sum_body)?;
+        // Verify unless verification was explicitly disabled (offline mode with
+        // no checksum source and --insecure-skip-verify). A required artifact
+        // that fails verification aborts the whole stage via `?`.
+        if let Some(body) = &sum_body {
+            crate::verify::verify_against_sumfile(&local, body)?;
         }
 
         staged.push(StagedArtifact {
@@ -67,6 +79,20 @@ pub fn stage(src: &SourceArgs) -> Result<Staged> {
             source_name: name,
             local_path: local,
         });
+    }
+
+    // Invariant: every required role must have made it into the staged set.
+    let missing: Vec<&str> = ARTIFACTS
+        .iter()
+        .filter(|a| a.required && !staged.iter().any(|s| s.role == a.role))
+        .map(|a| a.role)
+        .collect();
+    if !missing.is_empty() {
+        bail!(
+            "required artifacts missing after staging {version} ({}): {}",
+            src.arch,
+            missing.join(", ")
+        );
     }
 
     if staged.is_empty() {
@@ -86,9 +112,15 @@ pub fn stage(src: &SourceArgs) -> Result<Staged> {
     })
 }
 
-/// Fetch the checksum file. Online mode pulls it from the mirror; offline mode
-/// has no checksum source yet, so verification is skipped (returns "").
-fn stage_sumfile(src: &SourceArgs, version: &str, cache_dir: &Path) -> Result<String> {
+/// Fetch the checksum file used to verify staged artifacts.
+///
+/// Returns `Some(body)` to verify every staged artifact against, or `None` only
+/// when verification was explicitly disabled with `--insecure-skip-verify`.
+/// Online mode always pulls the mirror's `sha256sum.txt`. Offline mode uses the
+/// cached copy (an online run leaves one behind); if none is present it fails
+/// closed rather than building from unverified media, unless the operator opts
+/// out explicitly.
+fn stage_sumfile(src: &SourceArgs, version: &str, cache_dir: &Path) -> Result<Option<String>> {
     let sum_path = cache_dir.join("sha256sum.txt");
     match src.mode {
         Mode::Online => {
@@ -96,14 +128,24 @@ fn stage_sumfile(src: &SourceArgs, version: &str, cache_dir: &Path) -> Result<St
                 let url = crate::mirror::artifact_url(version, &src.arch, "sha256sum.txt");
                 crate::mirror::download(&url, &sum_path)?;
             }
-            Ok(fs::read_to_string(&sum_path)?)
+            Ok(Some(fs::read_to_string(&sum_path)?))
         }
         Mode::Offline => {
             if exists_nonempty(&sum_path)? {
-                Ok(fs::read_to_string(&sum_path)?)
+                Ok(Some(fs::read_to_string(&sum_path)?))
+            } else if src.insecure_skip_verify {
+                tracing::warn!(
+                    "offline mode: no sha256sum.txt in cache and --insecure-skip-verify \
+                     set; proceeding WITHOUT integrity verification"
+                );
+                Ok(None)
             } else {
-                tracing::warn!("offline mode: no sha256sum.txt available, skipping verification");
-                Ok(String::new())
+                bail!(
+                    "offline mode: no sha256sum.txt in cache ({}); cannot verify artifact \
+                     integrity. Populate the cache with an online run first, or pass \
+                     --insecure-skip-verify to build from unverified media (unsafe).",
+                    sum_path.display()
+                )
             }
         }
     }
@@ -127,4 +169,77 @@ fn fetch_one(src: &SourceArgs, version: &str, name: &str, local: &Path) -> Resul
 
 fn exists_nonempty(path: &Path) -> Result<bool> {
     Ok(path.exists() && fs::metadata(path)?.len() > 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    /// A unique, empty temp directory that removes itself on drop.
+    struct TmpDir(PathBuf);
+
+    impl TmpDir {
+        fn new() -> Self {
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let dir = std::env::temp_dir().join(format!(
+                "compose_rspaced-test-{}-{}",
+                std::process::id(),
+                n
+            ));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            TmpDir(dir)
+        }
+    }
+
+    impl Drop for TmpDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn offline_args(cache: PathBuf, insecure_skip_verify: bool) -> SourceArgs {
+        SourceArgs {
+            version: Some("4.18.30".into()),
+            series: "4.18".into(),
+            arch: "x86_64".into(),
+            mode: Mode::Offline,
+            registry: None,
+            cache,
+            insecure_skip_verify,
+        }
+    }
+
+    #[test]
+    fn offline_without_checksum_fails_closed() {
+        let tmp = TmpDir::new();
+        let src = offline_args(tmp.0.clone(), false);
+        // No sha256sum.txt in the cache dir -> must error, not skip.
+        let err = stage_sumfile(&src, "4.18.30", &tmp.0).unwrap_err();
+        assert!(
+            err.to_string().contains("no sha256sum.txt"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn offline_insecure_skip_verify_returns_none() {
+        let tmp = TmpDir::new();
+        let src = offline_args(tmp.0.clone(), true);
+        // Opt-out is honored: verification is disabled (None), not an error.
+        let body = stage_sumfile(&src, "4.18.30", &tmp.0).unwrap();
+        assert!(body.is_none());
+    }
+
+    #[test]
+    fn offline_with_cached_checksum_returns_body() {
+        let tmp = TmpDir::new();
+        fs::write(tmp.0.join("sha256sum.txt"), "abc123  somefile\n").unwrap();
+        let src = offline_args(tmp.0.clone(), false);
+        let body = stage_sumfile(&src, "4.18.30", &tmp.0).unwrap();
+        assert_eq!(body.as_deref(), Some("abc123  somefile\n"));
+    }
 }
